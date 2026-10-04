@@ -14,6 +14,8 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 |---|---|---|
 | `recipients.toml` | The recipients (age public keys) and their groups. Plaintext. | — |
 | `.sops.yaml` | The SOPS policy. The CLI makes it from `recipients.toml`. | — |
+| `.gitleaks.toml` | The gitleaks configuration. The CLI makes it. It keeps the default rules of gitleaks and allows only the age public keys in `recipients.toml`. A token in another file, and another token in `recipients.toml`, is still a finding. | — |
+| `README.md`, `.gitignore` | Plain files of the store. | — |
 | `dev.enc.yaml` | The development values. | `dev` |
 | `preview.enc.yaml` | The preview values that are different from dev. | `dev` |
 | `prod.enc.yaml` | The production values. | `prod` |
@@ -23,7 +25,10 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 - A recipient is the age key of one machine, with an id `<Name>@<machine>` and a list of groups. A machine opens only the files of its groups.
 - The recovery key is an age key on paper. It is a recipient of all groups.
 - The CLI keeps the store clones in the secrets home: `$SECRETS_HOME`, else `<NUU home>/secrets/` for the prod build and `<NUU home>/secrets-dev/` for the dev build. The NUU home is `$NUU_HOME`, else `~/.nuucognition`. The list of clones is `<secrets home>/stores.toml`.
-- A write that changes the store makes one Git commit and one push. A write with no change makes no commit. The operator does the writes (see [[dev-knw-nsec-rules]] § Rule 5).
+- The secrets home itself can be a symbolic link. Below its real path, no folder that the CLI uses can be a link: not `stores/`, not a clone folder, not the `.git` folder of a clone. The CLI refuses such a link and changes nothing.
+- Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, and each `*.enc.yaml`. The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once.
+- The store clone is a cache that the CLI owns. A refresh (`secret`, `export`, `store sync`, `doctor --online`) fetches it and resets it to the remote.
+- A write that changes the store makes one Git commit and one push. A write with no change makes no commit. The operator does the writes, also `store fix-config` and `store remove` (see [[dev-knw-nsec-rules]] § Rule 5).
 
 You never open these files. The CLI reads them for you. See [[dev-knw-nsec-rules]] § Rule 4.
 
@@ -82,10 +87,10 @@ LOG_LEVEL        = { value = "info", to = ["local"] }
 
 - Each entry has exactly one of `ref` or `value`. The fields are `ref`, `value`, `to`, and `optional`. Another field is an error.
 - `local` is the target of `secret <cmd>` and of `secrets export` (the default `--to local`). A platform target needs its `[targets.<target>]` table.
-- When the environment has no value for an `optional` entry, the CLI does not give that variable and does not stop. The `secret:` line counts it as "optional not set". A variable of the same name in the shell environment stays, also without `--keep-env`. Thus the line does not prove that the variable is absent. To make it absent, start the program with `env -u <VAR> secret <cmd>`.
+- When the environment has no value for an `optional` entry, the CLI does not give that variable and does not stop. The `secret:` line counts it as "optional not set". The mapping owns the name: `run` also removes a shell variable of the same name, and stderr names it. With `--keep-env`, the shell value stays.
 - A `ref` entry with no value, and not `optional`, is an error. The error names the variable and the secret name. Nothing runs.
 - The CLI finds `secrets.toml` in the current folder or in a parent folder. `--mapping <path>` gives another file. `--project <name>` finds the `secrets.toml` with that project name under the root of the current Git repository. It skips `node_modules`, `.git`, and `dist*`.
-- The `store` of the mapping selects the store. When this machine has no clone of that store, `secret` clones it and writes `secrets: cloning the store of <project> from <url>` on stderr.
+- The `store` of the mapping selects the store. When this machine has no clone of that store, `secret` clones it (a network access) and writes `secrets: cloning the store of <project> from <url>` on stderr. With `--offline`, it never clones: it stops with exit 1.
 
 ## The local mapping: `secrets.local.toml`
 
@@ -94,7 +99,7 @@ LOG_LEVEL        = { value = "info", to = ["local"] }
 - It must be in `.gitignore`. `secrets doctor` fails when Git tracks it.
 - It can hold only an `[env]` table. Each entry can target only `local`.
 - For the `local` target, its entries replace the entries of `secrets.toml` with the same variable.
-- `secrets export --to <platform target>` does not use its entries in the output. But this build still reads and checks the file: a `secrets.local.toml` that is not valid stops that export too (exit 1).
+- `secrets export --to <platform target>` does not use its entries in the output. But the CLI still reads and checks the file: a `secrets.local.toml` that is not valid stops that export too (exit 1).
 - `secrets bind` writes only `secrets.toml`. When `secrets.local.toml` has the same variable, `bind` writes a notice on stderr: the local entry wins on this machine.
 
 ## Literals
@@ -106,7 +111,7 @@ A literal (`value = "…"`) is committed in plaintext. Use a literal only when b
 
 A literal has no environment. `--env prod` gives the same literal as `--env dev`. A value that is different in each environment goes in the store, also when it is not secret.
 
-`secrets bind` refuses a literal that looks like a secret, and `secrets doctor` gives `fail` for it. The check looks for a known key prefix (for example `sk_live_`), a key block, a JWT, a URL with a password, or a random-looking string of 24 or more characters. The check does not find all secrets. You decide first: when a value can be secret, it is not a literal.
+`secrets bind` refuses a literal that looks like a secret, and `secrets doctor` gives `fail` for it. The check looks for a known key prefix (for example `sk_live_`), a key block, a JWT, a URL with a password, a high-entropy string of 24 or more characters, and a random token of 16 to 23 letters and digits. A UUID and a 40-character lowercase hex string pass, except when a word of the variable name says secret (for example `TOKEN` in `POSTMARK_API_TOKEN`). The check does not find all secrets ([[dev-knw-nsec-cli]] § Known limits, item 2). You decide first: when a value can be secret, it is not a literal.
 
 ## What goes in the store, and what does not
 
@@ -125,5 +130,6 @@ A literal has no environment. `--env prod` gives the same literal as `--env dev`
 
 - The process gets the shell environment and the variables of the `local` target.
 - A store value replaces a shell variable of the same name. stderr names each replaced variable (never the value). `--keep-env` keeps the shell value.
-- The values stay in memory and in the process environment of the command. `secret` writes no file with values. It can clone or refresh the encrypted store clone in the secrets home.
+- An `optional` variable with no store value: `run` removes a shell variable of the same name. `--keep-env` keeps it.
+- The values stay in memory and in the process environment of the command. `secret` writes no file with a plaintext value. A refresh or a first clone changes the Git files and the index of the store clone in the secrets home (ciphertext and public data only).
 - Other processes of the same user, and root, can read the process environment of the command (`/proc/<pid>/environ`).

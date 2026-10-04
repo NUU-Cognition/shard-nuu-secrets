@@ -47,26 +47,31 @@ Ask the operator to write a missing value, or to make or add a key. The operator
 
    - Outside the project folder, the operator adds `--store <local store name>` or `--mapping <path>` to the command.
    - A successful `secrets set` prints `set  <name>  env <env>  store <store> @ <revision>`, or `unchanged  …` when the store already has that value. Both exit 0. Neither shows a value.
-4. **Write the request for a key.** Use this shape when `secrets doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`. Choose step 1a or step 1b from the Key section of `doctor`:
-   - `no age key file at <path>`: step 1a.
-   - The Key section shows a public key (the key file exists): step 1b. Never replace an existing key.
+4. **Write the request for a key.** Use this shape when `secret` stops with `✘ No usable age key: …`, or when `secrets doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`. Do not use it for `this machine as a recipient: unknown (…)`: that line is not proof of a missing key (see [[dev-sk-nsec-diagnose]]). First collect the public facts yourself:
+   - The Key section of `secrets doctor` has a `fail` (no key file, not a regular file, or cannot be read): use step 1a of the request. You cannot get a public key.
+   - The Key section shows a public key (the key file exists): use step 1b. Never ask for a new key. Run these two commands yourself:
+     ```sh
+     secrets whoami          # the id row: <Name>@<machine>
+     secrets keygen --public # the full public key (one line); it makes no key
+     ```
+     `keygen --public` reads the key file for you and prints only the public key. When the key file has more identities, stdout has the first one, and stderr names the count. Never open the key file yourself, and never use `--file`.
+   - The store URL and the local store name (step 1).
 
    ```text
    NUU Secrets cannot open the store <store URL> on this machine.
-   Observation (secrets doctor): <the fail line>
+   Observation: <the ✘ line of secret, or the fail line of secrets doctor>
 
-   1a. This machine has no key file. In your own terminal, run:
+   1a. This machine has no usable key file. In your own terminal, run:
          secrets keygen
-       It prints the id and the public key. It never prints the private key.
-   1b. The key file exists. Do not make a new key. In your own terminal, run:
-         secrets whoami
-         age-keygen -y <key file>
-       whoami prints the id. age-keygen -y prints the public key of the existing key.
+       It prints the id and the public key. It never prints the private key. It never replaces an existing key file.
+   1b. The key file exists. Do not make a new key. The public facts of this machine:
+         id:         <the id from secrets whoami>
+         public key: <the line from secrets keygen --public>
    2. Send the id and the public key to a store admin. Never send the key file.
       The admin compares the fingerprint (the last 8 characters of the public key) with you through a second channel, for example a call.
    3. The admin confirms the store URL <store URL>. Then the admin runs, in a project folder of this store (or with --mapping <path> or --store <the admin's local store name>):
          secrets recipient add "<id>" <age-public-key> --groups <groups>
-   4. On this machine:
+   4. Then, on this machine (I can run this step):
       - when `secrets store list` has no row with the URL <store URL>: secrets store clone <store URL>
       - else: secrets store sync <local store name>
 
@@ -74,8 +79,9 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    ```
 
    - Give the groups that the task needs: `dev` for development values, `prod` and `deploy` only when the operator decides.
-   - `<key file>` is `$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`. The `doctor` Key section shows the path. Do not run `age-keygen -y` yourself: it reads the key file.
+   - The key file is `$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`. The `doctor` Key section shows the path.
    - When the key is in another file, the operator can set `SOPS_AGE_KEY_FILE` to that file in place of step 1a.
+   - After the admin adds the key, run step 4 yourself (`secrets store clone` or `secrets store sync` are agent commands), then `secrets doctor --online`.
 5. **Send the request.**
    - In an interactive session, write it in your reply and wait for the operator.
    - In a headless session, follow [[dev-hinit-nsec]]: put the request in your result as a blocker. Do not guess and do not wait in a loop.
@@ -83,7 +89,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    - do not repeat it and do not use it;
    - tell the operator that the value is now in the session transcript;
    - follow [[dev-knw-nsec-rules]] § If a value leaks (the operator replaces the value at its provider).
-7. **Check the result.** When the operator says that the commands are done, run `secrets doctor` (or the `secret <cmd>` again). The `fail` lines for these names must be gone.
+7. **Check the result.** When the operator says that the commands are done, run `secrets doctor --online` (or the `secret <cmd>` again). Plain `doctor` reads the cached clone, which does not have the new values or recipients yet. The `fail` lines for these names must be gone.
 
 # Output
 

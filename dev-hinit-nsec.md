@@ -9,7 +9,7 @@ This is the init of the NUU Secrets shard for a headless Orbh session. The rules
 
 ## What NUU Secrets Is
 
-NUU Secrets keeps the secrets of a team in one encrypted Git store (SOPS + age) and gives them to programs. The CLI is `secrets`. Its alias `secret <cmd>` runs a program with the values in its process environment. It writes no file with values (it can clone or refresh the encrypted store). Each project has a committed `secrets.toml` that maps variables to secret names (`secret://clerk/secret-key`) and literals. The environments are `dev`, `preview` (dev with preview values over it), `prod` (never falls back to dev), and `deploy`. Only the operator enters values and manages keys. The model is in [[dev-knw-nsec-model]]. The commands and the known limits are in [[dev-knw-nsec-cli]].
+NUU Secrets keeps the secrets of a team in one encrypted Git store (SOPS + age) and gives them to programs. The CLI is `secrets`. Its alias `secret <cmd>` runs a program with the values in its process environment. It writes no file with a plaintext value (a refresh or a first clone changes the Git files and the index of the store clone). Each project has a committed `secrets.toml` that maps variables to secret names (`secret://clerk/secret-key`) and literals. The environments are `dev`, `preview` (dev with preview values over it), `prod` (never falls back to dev), and `deploy`. Only the operator enters values and manages keys. The model is in [[dev-knw-nsec-model]]. The commands and the known limits are in [[dev-knw-nsec-cli]].
 
 ## The Rules in Short
 
@@ -17,8 +17,8 @@ The complete rules are in [[dev-knw-nsec-rules]].
 
 1. Never print, log, echo, or type a value. This includes your result, an Orbh message, an update, the `blockers` key, a Mesh note, a commit message, and a test fixture.
 2. Never write a value to a file. Never pass a value as a process argument.
-3. Never read or copy the key file. Never decrypt or edit a store file.
-4. Never run an operator-only command (`secrets set`, `edit`, `unset`, `keygen`, `recipient add|rm`, `store init`, `store fix-config`, `login`, `logout`). The one exception: your prompt relays an instruction of the operator that names that exact command.
+3. Never read or copy the key file. Never decrypt or edit a store file. `secrets keygen --public` (with no `--file`) gives you the public key of this machine.
+4. Never run an operator-only command (`secrets set`, `edit`, `unset`, `keygen` except `keygen --public` with no `--file`, `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `login`, `logout`). The one exception: your prompt relays an instruction of the operator that names that exact command.
 5. You are a user. The rules prevent accidents. They are not a security boundary.
 
 ## What Is Different in a Headless Session
@@ -26,7 +26,8 @@ The complete rules are in [[dev-knw-nsec-rules]].
 1. **No interactive prompt.** Never start a command that waits for a person: `secrets set` (a hidden prompt), `secrets edit` (an editor), or `secrets login` (a browser). These are operator commands.
 2. **A blocker goes to a person, never to a guess.** These are blockers:
    - a value is missing (`✘ <n> variable(s) have no value in env <env> …`, or a `doctor` line `… is not in the store`);
-   - `doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`;
+   - `secret` stops with `✘ No usable age key: …`, or `doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`;
+   - `--offline` stops with `… has no cached clone on this machine` and the task forbids network access;
    - a `doctor` item that only the operator can fix ([[dev-sk-nsec-diagnose]]);
    - a tool needs a file with values.
 

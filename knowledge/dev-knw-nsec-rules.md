@@ -17,7 +17,7 @@ This shard uses one word for one thing.
 | variable | An environment variable of a process, for example `CLERK_SECRET_KEY`. A variable name is not secret. |
 | environment | The store environment that `--env` selects: `dev`, `preview`, `prod`, or `deploy`. |
 | store | The Git repository of the team that holds the encrypted values (SOPS + age). |
-| store clone | The copy of the store on this machine, at `<secrets home>/stores/<store name>/`. |
+| store clone | The copy of the store on this machine, at `<secrets home>/stores/<store name>/`. The CLI owns it as a cache. |
 | key file | The age private key of this machine: `$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`. |
 | operator | The person who owns this machine and its store access. Only the operator enters values and manages keys. |
 
@@ -71,10 +71,12 @@ Other processes can read the arguments of a process. A program must read a value
 
 ## Rule 4 — Never touch the key or the store files
 
-- Do not open, print, copy, move, or change the key file. To check the key, run `secrets doctor` (the path, the mode, and the fingerprint) or `secrets whoami` (the fingerprint and the path). The fingerprint is the last 8 characters of the public key.
+- Do not open, print, copy, move, or change the key file. To check the key, run `secrets doctor` (the path, the mode, and the fingerprint), `secrets whoami` (the fingerprint and the path), or `secrets keygen --public` (the full public key; it makes no key). The fingerprint is the last 8 characters of the public key.
+- Do not read or print the variable `SOPS_AGE_KEY`: it can hold a private key. Do not run the command of `SOPS_AGE_KEY_CMD`.
 - Do not decrypt a store file. Do not run `sops` on a store file. An error of `secret` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
-- Do not edit `*.enc.yaml`, `.sops.yaml`, `recipients.toml`, or `stores.toml` by hand.
-- Do not run Git commands in a store clone, and do not delete a store clone. To refresh the store clones, run `secrets store sync`.
+- Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, or `stores.toml` by hand.
+- Do not run Git commands in a store clone, and do not delete a store clone. Do not delete a `.removing-*` folder in the stores folder: report it to the operator. To refresh the store clones, run `secrets store sync` or `secrets doctor --online`.
+- Do not move, link, or replace folders in the secrets home. The CLI refuses a symbolic link below the secrets home and a store file that is not a regular file. Report such a message to the operator.
 
 ## Rule 5 — Operator-only commands
 
@@ -85,10 +87,11 @@ The operator enters values and manages keys. Do not run these commands. The one 
 | `secrets set` | Writes a value. The value comes from a hidden prompt or stdin. |
 | `secrets edit` | Shows the values of one store file in an editor. For preview, it shows only the preview file. |
 | `secrets unset` | Removes a value. |
-| `secrets keygen` | Makes an age private key. |
+| `secrets keygen`, `secrets keygen --out <file>`, `secrets keygen --public --file <path>` | Make an age private key, or read another key file. `secrets keygen --public` with no `--file` is not on this list (see Rule 6). |
 | `secrets recipient add`, `secrets recipient rm` | Change who can open the store. |
 | `secrets store init` | Creates a store. |
-| `secrets store fix-config` | Writes `.sops.yaml` again after a hand edit. |
+| `secrets store fix-config` | Writes the generated `.sops.yaml` and `.gitleaks.toml` again: one commit and one push. |
+| `secrets store remove` | Removes a store clone and its entry in `stores.toml` (local state). The operator runs it from a folder outside the clone. |
 | `secrets login`, `secrets logout` | Change the NUU account of the operator. |
 
 "The operator asks" means: the operator (or your dispatcher, for the operator) names this command for this action in this session. A general task, for example "set up the secrets of the app", does not give this permission.
@@ -100,11 +103,13 @@ For `secrets set` and `secrets edit`, the operator types the values in their own
 | Command | Use |
 |---|---|
 | `secret <cmd>`, `secrets run` | Run a program with the values in its process environment. See [[dev-sk-nsec-run_app]]. |
-| `secrets doctor` | Check the tools, the key, the stores, the mapping, and the project. It changes nothing. See [[dev-sk-nsec-diagnose]]. |
+| `secrets doctor` | Check the tools, the key, the stores, the mapping, and the project. Without `--online`, it changes nothing. See [[dev-sk-nsec-diagnose]]. |
+| `secrets doctor --online` | The same checks after a refresh: it fetches each checked clone and resets it to the remote. The reset discards the local changes of an interrupted command in the clone (a cache that the CLI owns). It never clones a missing store. |
+| `secrets keygen --public` | Print the full public key of the key file of this machine. It makes no key and never prints the private key. Use it only with no `--file`. |
 | `secrets whoami` | Show the recipient id, the key fingerprint, and the stores of this machine. |
 | `secrets store list` | List the store clones of this machine (no values). |
 | `secrets store sync` | Refresh the store clones. |
-| `secrets store clone` | Clone the store of a project. You seldom need it: `secret` clones the store when necessary. |
+| `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secret` without `--offline` clones the store when necessary. |
 | `secrets init-project`, `secrets bind` | Write `secrets.toml`: names and targets, no values. See [[dev-sk-nsec-setup_project]]. |
 | `secrets export` | Only under the conditions below. |
 | `--help`, `--version` | Show the help or the version. |
@@ -131,7 +136,7 @@ A platform target (`vercel`, `convex`, `railway`) in `secrets.toml` sends values
 
 This shard is for the use of NUU Secrets in projects. A task that tests the `secrets` CLI itself (not an app) needs a sandbox:
 
-- In each command that runs `secrets` or `secret`, set `HOME`, `SECRETS_HOME`, `NUU_HOME`, `XDG_RUNTIME_DIR`, and `TMPDIR` to temporary folders. Set `SOPS_AGE_KEY_FILE` to a file path in the temporary root folder (for example `<temp root>/home/keys.txt`).
+- In each command that runs `secrets` or `secret`, set `HOME`, `SECRETS_HOME`, `NUU_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, and `TMPDIR` to temporary folders. Set `SOPS_AGE_KEY_FILE` to a file path in the temporary root folder (for example `<temp root>/home/keys.txt`). Unset `SOPS_AGE_KEY` and `SOPS_AGE_KEY_CMD`: SOPS can use them, and the SOPS default key file under `XDG_CONFIG_HOME`, as other key sources.
 - Use test keys (`age-keygen`), a local bare Git repository as the store remote, and made-up test values.
 - Never read or change the real key file or the real store clones.
 - Delete the temporary folders at the end.

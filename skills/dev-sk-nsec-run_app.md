@@ -8,7 +8,7 @@ Run `flint shard start nsec` if you haven't already.
 
 # Skill: Run an App with Secrets
 
-Run a program (a dev server, a test, a script) with the variables of its project from the store. The values go only into the process environment of the program. The wrapper writes no file with values. It can clone or refresh the encrypted store clone, and it can update Git and index files.
+Run a program (a dev server, a test, a script) with the variables of its project from the store. The values go only into the process environment of the program. The wrapper writes no file with a plaintext value. A refresh or a first clone of the store changes the Git files and the index of the store clone.
 
 # Input
 
@@ -32,8 +32,10 @@ Run a program (a dev server, a test, a script) with the variables of its project
    secret --offline pnpm test
    secrets run --env preview -- node server.js
    ```
-   - Use `--offline` when there is no network. With an existing clone, `--offline` does not refresh it, and stderr names its cached revision. When no clone exists, this build still clones the store: that is a network access. Before an offline run, run `secrets store list` and find the row whose `URL` is the `store` of the mapping. When there is no such row and the task forbids network access, do not run: report a blocker.
-   - Use `--keep-env` only when a shell variable must win over the store value. Normally the store value wins, and stderr names the replaced variable.
+   - Use `--offline` when there is no network, or when the task forbids network access. `--offline` uses the cached clone, names its revision on stderr, and makes no network call. When the store has no cached clone, it stops with `✘ --offline: the store of <project> (<url>) has no cached clone on this machine. Nothing was cloned.` (exit 1). Then:
+     - when the task allows network access, run once without `--offline` (it clones the store), or run `secrets store clone <url>`;
+     - else report a blocker.
+   - Use `--keep-env` only when a shell variable must win over the store value, or must stay when an `optional` variable has no store value. Normally the store value wins, stderr names the replaced variable, and the shell value of an absent `optional` variable is removed.
    - `--` ends the options of `secret`. The first word that is not an option also ends them. Each word after that goes to the program without a change.
 5. **Do not put `secret` in project files.** Do not add `secret` to the scripts of `package.json`, to a `Makefile`, or to CI files. The person or the agent adds `secret` in front of the command at run time. A project file with `secret` fails on a machine without NUU Secrets.
 6. **Turborepo.** When the program is `turbo run …` and Turborepo uses strict env mode, Turborepo can drop the variables. Run `secret` in the app folder with the app command (for example `secret next dev`). If the task needs `turbo run`, ask the operator to add the variables to `passThroughEnv` or `globalPassThroughEnv` in `turbo.json`. Do not change `turbo.json` yourself unless the task says so.
@@ -41,10 +43,9 @@ Run a program (a dev server, a test, a script) with the variables of its project
 8. **Read the `secret:` line.** Before the program starts, stderr has one line:
    `secret: <project> · env <env> · store <revision> (<date>) · <n> variables`
    - Check the project, the environment, and the count.
-   - `· <n> optional not set` means that the store has no value for `<n>` `optional` entries. The CLI does not give these variables. But a variable of that name that is already in your shell environment stays in the process environment of the program, also without `--keep-env`. The `secret:` line does not prove that the variable is absent.
-   - When the task needs an optional variable to be absent, remove it from the launch environment. Do not show its value: `env -u <VAR> secret <cmd>`.
+   - `· <n> optional not set` means that the store has no value for `<n>` `optional` entries. The CLI does not give these variables. When your shell has a variable of the same name, the CLI removes it from the process environment of the program, and stderr says `secret: the store has no value for the optional <VAR>: the shell value is removed (--keep-env keeps it)`. With `--keep-env`, the shell value stays, and stderr says so.
    - `store not read (no ref entries)` means that the mapping has only literals for this target.
-   - `secrets: cloning the store of <project> from <url>` before the line means a first clone. See [[dev-knw-nsec-cli]] § Known limits, item 3.
+   - `secrets: cloning the store of <project> from <url>` before the line means a first clone (a network access). Check that the secrets home is the intended one ([[dev-knw-nsec-model]] § The store). Only the operator can remove a clone (`secrets store remove`).
 9. **Check a variable without its value** when the task needs proof:
    ```sh
    secret sh -c 'test -n "$CLERK_SECRET_KEY" && echo "CLERK_SECRET_KEY is set"'
@@ -56,7 +57,10 @@ Run a program (a dev server, a test, a script) with the variables of its project
     | `0` | The program succeeded. | Continue. |
     | `1` with `✘ <n> variable(s) have no value in env <env>` | Values are missing. Nothing ran. | Use [[dev-sk-nsec-request_value]] for each listed name. |
     | `1` with `✘ There is no secrets.toml …` | No mapping here. | Go to the project folder, or use [[dev-sk-nsec-setup_project]]. |
-    | `1` with `✘ sops decrypt failed …` | This machine cannot open the store file. | Use [[dev-sk-nsec-diagnose]]. Do not run `sops`. |
+    | `1` with `✘ No usable age key: …` | The key file is missing, not a regular file, or cannot be read. Nothing ran. | Tell the operator the path. Do not make a key. Use [[dev-sk-nsec-request_value]] (the key request). |
+    | `1` with `✘ sops decrypt failed …` | The key file is usable, but SOPS did not decrypt the store file with it. | Use [[dev-sk-nsec-diagnose]]. Do not run `sops`. |
+    | `1` with `✘ --offline: … has no cached clone …` | `--offline` and no clone. Nothing ran. | See step 4. |
+    | `1` with `✘ The stores folder <path> is a symbolic link …` or `✘ Store <name> has a file that is not a regular file …` | An unsafe store layout. Nothing ran. | Report the message to the operator. Use [[dev-sk-nsec-diagnose]]. |
     | `2` with `✘ No command to run.` | No program after the options. The program did not start. | Give the program. |
     | `1` with `error: …` | The option parser refused an option of `secret` (for example `error: unknown option '--bad'`). | Fix the option, or put it after the program name. |
     | `126` with `✘ Cannot start <cmd> (EACCES).`, `127` with `✘ The program "<cmd>" is not on PATH.` | The program is not executable, or not on `PATH`. | Fix the program name or the path. |

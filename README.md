@@ -2,9 +2,9 @@
 
 Teaches agents to use NUU Secrets safely: run apps with secrets, map variables, diagnose, and follow the no-value rules.
 
-NUU Secrets keeps the secrets of a team in one encrypted Git store (SOPS + age). Each project maps its environment variables in a committed `secrets.toml`. `secret <cmd>` runs a program with the values in its process environment and writes no file with values. This shard gives an agent the rules and the steps to use the tool without a leak. The agent never sees, writes, or moves a value. The operator enters the values and manages the keys.
+NUU Secrets keeps the secrets of a team in one encrypted Git store (SOPS + age). Each project maps its environment variables in a committed `secrets.toml`. `secret <cmd>` runs a program with the values in its process environment and writes no file with a plaintext value. This shard gives an agent the rules and the steps to use the tool without a leak. The agent never sees, writes, or moves a value. The operator enters the values and manages the keys.
 
-This folder is the local source of the shard (shorthand `nsec`, package `@nuucognition/nuu-secrets`). The build is in `Shards/NUU Secrets/`.
+This folder is the remote source of the shard (shorthand `nsec`, package `@nuucognition/nuu-secrets`): a clone of `NUU-Cognition/shard-nuu-secrets`. The build is in `Shards/NUU Secrets/`.
 
 ## Structure
 
@@ -34,4 +34,4 @@ Edit the files of this folder. Then build the shard again:
 flint shard build nuu-secrets
 ```
 
-The command facts come from the `secrets` CLI at canon `15c40cf` (`secrets --help` and the README of `NUU-Cognition/secrets`). When the CLI changes, check each command, option, and message of the knowledge files and the skills again.
+The command facts come from the `secrets` CLI at canon `c1f8b20` (`secrets --help` and the README of `NUU-Cognition/secrets`). When the CLI changes, check each command, option, and message of the knowledge files and the skills again.
