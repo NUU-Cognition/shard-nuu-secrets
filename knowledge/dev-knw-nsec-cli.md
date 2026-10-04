@@ -73,7 +73,7 @@ Checks the tools, the key, the stores, the mapping, the project hygiene, and the
 - **Without `--online`**, `doctor` reads the cached clones. It makes no network call and changes nothing. Each store section names the cached revision and its date: `ok  cached revision <revision> (<date>): doctor reads the clone offline, so it can be older than the remote (…)`.
 - **With `--online`**, `doctor` fetches each checked clone and resets it to the remote. The store clone is a cache that the CLI owns: the reset discards the local changes and commits of an interrupted command. `--online` never changes the remote, and it never clones a store that has no clone. The line is `ok  revision <revision> (<date>), refreshed from the remote just now (--online)`. A failed refresh is `fail  --online: cannot refresh the clone: …`, and then the checks of the cached clone follow (`warn  cached revision …: the refresh failed, so the clone can be older than the remote`).
 - `doctor --online` does not show the changes of `recipients.toml`. `secrets store sync <name>` shows them, with the ids, groups, fingerprints, and commit authors.
-- An agent runs plain `doctor` before `doctor --online` or `store sync <name>`, with the same options, and refreshes only the checked store ([[dev-knw-nsec-rules]] § Rule 6).
+- Before `secrets doctor --online`, run plain `secrets doctor` with the same mapping, store, and environment options. Before `secrets store sync <name>`, run plain `secrets doctor` that checks the named store. For sync, pass that store name as the argument. Refresh only stores that the plain check covered ([[dev-knw-nsec-rules]] § Rule 6).
 - Steps: [[dev-sk-nsec-diagnose]].
 
 ### `secrets whoami`
