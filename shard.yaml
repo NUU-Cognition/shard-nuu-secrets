@@ -1,0 +1,11 @@
+shard-spec: "0.4.0"
+shard: "@nuucognition/nuu-secrets"
+id: 6c69ed31-6d66-4f71-9e31-14c76f9aed1a
+source:
+  id: b94cfe83-9331-49a3-8051-f9a93a4945aa
+version: "0.1.0"
+name: NUU Secrets
+shorthand: nsec
+description: "Teaches agents to use NUU Secrets safely: run apps with secrets, map variables, diagnose, and follow the no-value rules"
+dependencies:
+  "@nuucognition/flint": "^0.3"
