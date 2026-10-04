@@ -72,7 +72,8 @@ Checks the tools, the key, the stores, the mapping, the project hygiene, and the
 
 - **Without `--online`**, `doctor` reads the cached clones. It makes no network call and changes nothing. Each store section names the cached revision and its date: `ok  cached revision <revision> (<date>): doctor reads the clone offline, so it can be older than the remote (…)`.
 - **With `--online`**, `doctor` fetches each checked clone and resets it to the remote. The store clone is a cache that the CLI owns: the reset discards the local changes and commits of an interrupted command. `--online` never changes the remote, and it never clones a store that has no clone. The line is `ok  revision <revision> (<date>), refreshed from the remote just now (--online)`. A failed refresh is `fail  --online: cannot refresh the clone: …`, and then the checks of the cached clone follow (`warn  cached revision …: the refresh failed, so the clone can be older than the remote`).
-- `doctor --online` does not show the changes of `recipients.toml`. `secrets store sync` shows them, with the ids, groups, fingerprints, and commit authors.
+- `doctor --online` does not show the changes of `recipients.toml`. `secrets store sync <name>` shows them, with the ids, groups, fingerprints, and commit authors.
+- An agent runs plain `doctor` before `doctor --online` or `store sync <name>`, with the same options, and refreshes only the checked store ([[dev-knw-nsec-rules]] § Rule 6).
 - Steps: [[dev-sk-nsec-diagnose]].
 
 ### `secrets whoami`
@@ -88,7 +89,8 @@ secrets keygen --public
 Prints the full age public key of the key file of this machine as one line on stdout. It makes no key. It never prints the private key. The CLI reads the key file for you: you never open the key file yourself.
 
 - When the key file has more than one identity, stdout has the first one, and stderr says: `secrets: <file> has <n> identities. This is the first one: the CLI uses it as the key of this machine.`
-- When the key file is missing or cannot be used, the command stops with `✘ No usable age key: …` (exit 1).
+- A missing, unreadable, or non-regular key file gives `✘ No usable age key: …` (exit 1).
+- An invalid identity file can give `✘ age-keygen cannot read the key file <path> (exit <n>).` or `✘ The key file <path> holds no age identity.` Both exit 1. Give the error to the operator. Do not open the file or run `age-keygen -y` yourself.
 - Only this form is for agents. `secrets keygen` with no option, `--out <file>`, and `--public --file <path>` are operator commands.
 
 ### `secrets store list`, `secrets store sync`, `secrets store clone`
@@ -96,7 +98,7 @@ Prints the full age public key of the key file of this machine as one line on st
 | Command | What it does |
 |---|---|
 | `secrets store list` | Lists the store clones of this machine: `NAME`, `REVISION`, `URL`. No values. |
-| `secrets store sync [<name>]` | Refreshes one store clone, or all. It shows each change of `recipients.toml` since the last sync, with the commit author. It resets the current branch and the work tree of the clone to the remote. |
+| `secrets store sync [<name>]` | Refreshes one store clone, or all. It shows each change of `recipients.toml` since the last sync, with the commit author. It resets the current branch and the work tree of the clone to the remote. An agent always names the store, after a plain `secrets doctor` of that store ([[dev-knw-nsec-rules]] § Rule 6). |
 | `secrets store clone <url> [--name <name>]` | Clones an existing store. `secret` without `--offline` clones the store of a mapping when necessary, so you seldom need this command. |
 
 ### `secrets init-project` and `secrets bind`
@@ -151,7 +153,14 @@ A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks t
 
 - It makes no network call, and it does not change the remote. stdout: `removed  <name>  <path>`. stderr: ``secrets: the remote is not changed. To use the store again, run `secrets store clone <url>`.``
 - The operator runs it from a folder outside the clone. From the clone or a folder below it, it stops: `✘ Cannot remove store <name>: the working folder <path> is inside the clone. Nothing was removed.`
-- It refuses (exit 1, nothing removed) local work in the clone, each with its own remedy: `✘ Cannot remove store <name>: <reason>. Nothing was removed.` The reasons are: commits of the current branch that the remote does not have, another local branch with such commits, a stash, a commit with no current branch, changed or untracked files, a lock of a running command, and an unfinished Git operation. `secrets store sync <name>` resets the current branch and the work tree. It does not remove a stash or another local branch.
+- It refuses local work with exit 1: `✘ Cannot remove store <name>: <reason>. Nothing was removed.` Its commit checks use cached remote-tracking refs. They make no network call.
+- Current-branch commits absent from those refs: the operator decides whether to keep them. To discard them, the operator runs `secrets store sync <name>`.
+- Another local branch with such commits: the operator runs `git -C "<clone path>" branch -vv`. To discard a branch, the operator runs `git -C "<clone path>" branch -D <branch>`. Sync does not remove it.
+- A stash: the operator runs `git -C "<clone path>" stash list`. To discard one entry, the operator runs `git -C "<clone path>" stash drop`. Sync does not remove it.
+- Detached HEAD with commits absent from the cached refs: the operator runs `git -C "<clone path>" status`. The operator keeps those commits on a branch and pushes them, or discards them by hand. Sync cannot repair detached HEAD.
+- Changed or untracked files: to discard them, the operator runs `secrets store sync <name>`.
+- A live lock or unfinished Git operation: give the operator the exact refusal and remedy. Do not reset the clone or delete the lock yourself.
+- After the operator resolves the refusal, the operator runs `secrets store remove <name>` again from outside the clone.
 - An entry whose clone folder is missing loses only its entry: `removed  <name>  entry only: the clone folder <path> was missing`.
 - `✘ The clone folder of store <name> changed during the removal. Nothing was removed.` means that a check found a changed folder.
 - After the removal, when the old working folder does not exist any more, stderr says `secrets: the old working folder <path> does not exist any more. The removal is done.` (exit 0).
@@ -186,7 +195,7 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 |---|---|---|
 | `✘ <n> variable(s) have no value in env <env> of store <store>:` with lines `- <VAR> → secret://<name>` | The store has no value for these names in this environment. Nothing ran. | Ask the operator: [[dev-sk-nsec-request_value]]. |
 | `✘ No usable age key: no age key file at <path>.` (or `the age key file <path> is not a regular file.`, or `the age key file <path> cannot be read.`) with ``Run `secrets keygen` (or set SOPS_AGE_KEY_FILE).`` | The CLI found no usable key file before any decrypt. Nothing ran. | Tell the operator the path. Do not make a key. Use the key request of [[dev-sk-nsec-request_value]]. |
-| `✘ sops decrypt failed (exit <n>) on <file>: the age key of this machine cannot decrypt the data key of the file.` | The key file is usable, but SOPS did not decrypt the file with it. The CLI does not show the cause. | Run `secrets doctor`. Do not run `sops`. |
+| `✘ sops decrypt failed (exit <n>) on <file>: the age key of this machine cannot decrypt the data key of the file.` | SOPS did not decrypt the file with the available key sources. This error does not prove that the selected key file is valid. The CLI does not show the cause. | Run `secrets doctor`. Do not run `sops`. |
 | `✘ --offline: the store of <project> (<url>) has no cached clone on this machine. Nothing was cloned.` | `--offline` found no clone. Nothing ran. No network call. | When the task allows network access, run once without `--offline`, or `secrets store clone <url>`. Else report a blocker. |
 | `secret: the store has no value for the optional <VAR>: the shell value is removed (--keep-env keeps it)` | The command runs without that variable. | Normal. Use `--keep-env` only when the task needs the shell value. |
 | `✘ The stores folder <path> is a symbolic link. The CLI follows no symbolic link below the secrets home. Nothing was changed.` | `stores/` in the secrets home is a link. | Report the path to the operator. Do not move or link folders. |

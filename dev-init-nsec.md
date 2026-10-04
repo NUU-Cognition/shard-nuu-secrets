@@ -61,7 +61,7 @@ setup_project → request_value → (operator: secrets set) → run_app
 secret pnpm dev                          # run with dev values
 secret --env preview node server.js      # run with preview values
 secrets doctor                           # check everything offline; changes nothing
-secrets doctor --online                  # refresh (fetch and reset) the clones first, then check
+secrets doctor --online                  # after a plain doctor with the same options: refresh (fetch and reset), then check
 secrets whoami                           # the id, the key fingerprint, the stores, the groups
 secrets store list                       # the store clones of this machine
 secrets keygen --public                  # the public key of this machine; makes no key

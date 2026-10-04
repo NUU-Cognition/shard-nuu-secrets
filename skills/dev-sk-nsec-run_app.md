@@ -58,7 +58,7 @@ Run a program (a dev server, a test, a script) with the variables of its project
     | `1` with `✘ <n> variable(s) have no value in env <env>` | Values are missing. Nothing ran. | Use [[dev-sk-nsec-request_value]] for each listed name. |
     | `1` with `✘ There is no secrets.toml …` | No mapping here. | Go to the project folder, or use [[dev-sk-nsec-setup_project]]. |
     | `1` with `✘ No usable age key: …` | The key file is missing, not a regular file, or cannot be read. Nothing ran. | Tell the operator the path. Do not make a key. Use [[dev-sk-nsec-request_value]] (the key request). |
-    | `1` with `✘ sops decrypt failed …` | The key file is usable, but SOPS did not decrypt the store file with it. | Use [[dev-sk-nsec-diagnose]]. Do not run `sops`. |
+    | `1` with `✘ sops decrypt failed …` | SOPS did not decrypt the file with the available key sources. This error does not prove that the selected key file is valid. | Use [[dev-sk-nsec-diagnose]]. Do not run `sops`. |
     | `1` with `✘ --offline: … has no cached clone …` | `--offline` and no clone. Nothing ran. | See step 4. |
     | `1` with `✘ The stores folder <path> is a symbolic link …` or `✘ Store <name> has a file that is not a regular file …` | An unsafe store layout. Nothing ran. | Report the message to the operator. Use [[dev-sk-nsec-diagnose]]. |
     | `2` with `✘ No command to run.` | No program after the options. The program did not start. | Give the program. |

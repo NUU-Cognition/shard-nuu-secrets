@@ -19,17 +19,17 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
 # Actions
 
 1. **Read the rules.** You read [[dev-knw-nsec-rules]]. Never run `sops`, never open the key file, and never open a store file to diagnose.
-2. **Read the cached state first, then refresh.** First run `secrets doctor` once with no `--online` (step 3). It changes nothing, and it shows unpushed commits, changed files, and links in the clone. A refresh discards or hides them, so keep these lines for the report. Then, when the network is available, run:
+2. **Read the cached state first, then refresh.** Run plain `secrets doctor` with the mapping, store, and environment options for this task. Keep its lines about unpushed commits, changed files, and links. Use `secrets store list` to match the mapping URL to its local store name. When the network is available, refresh only that store:
    ```sh
-   secrets store sync
+   secrets store sync <local store name>
    ```
-   It fetches each clone and resets it to the remote. It also shows each change of `recipients.toml` since the last sync, with the ids, groups, fingerprints, and commit authors. Read the output with step 8. Then run `secrets doctor` again.
+   It fetches that clone and resets it to the remote. It also reports recipient changes (step 8). Then run plain `secrets doctor` with the same options. If the task covers more stores, check each store before you refresh it. Do not use an unnamed sync after a doctor that checked only one store.
 3. **Run the checks.** In the project folder, run:
    ```sh
    secrets doctor
    ```
-   - Without `--online`, `doctor` reads the cached clones, makes no network call, and changes nothing. The line `cached revision <revision> (<date>): doctor reads the clone offline, so it can be older than the remote` says how old the clone is.
-   - `secrets doctor --online` first fetches each checked clone and resets it to the remote, then checks. The reset discards the local changes and commits of an interrupted command (the clone is a cache that the CLI owns). It never clones a missing store. It does not show the changes of `recipients.toml`: use `secrets store sync` for them.
+   - Without `--online`, `doctor` reads the cached clones, makes no network call, and changes nothing. The line `cached revision <revision> (<date>): doctor reads the clone offline, so it can be older than the remote` gives the cached commit and its commit date. It does not give the last refresh time.
+   - `secrets doctor --online` first fetches each checked clone and resets it to the remote, then checks. The reset discards the local changes and commits of an interrupted command (the clone is a cache that the CLI owns). It never clones a missing store. Run it only after the plain check with the same options (step 2). It does not show the changes of `recipients.toml`: use `secrets store sync <local store name>` for a checked store.
    - Outside the project folder, add `--mapping <path>` or `--project <name>`.
    - Add `--env <env>` (one or more times) to check only some environments. The default is `dev`, `preview`, and `prod`.
    - The exit status is 1 when a check fails. The last line counts the results. An exit status 0 can still have `warn` and `skipped` lines.
@@ -38,20 +38,21 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    | Section | Message (start) | Who acts | Action |
    |---|---|---|---|
    | Tools | `<tool> is not on PATH`, `<tool> does not start`, `sops <version> is too old` | Operator | Give the remedy line (the install command). |
-   | Key | `fail  no age key file at <path>`, `fail  the age key file <path> is not a regular file`, `fail  the age key file <path> cannot be read` | Operator | Use the key request of [[dev-sk-nsec-request_value]] (step 4). The operator makes a key (`secrets keygen`) or sets `SOPS_AGE_KEY_FILE` to the file of an existing key. Do not make a key. |
+   | Key | `fail  no age key file at <path>`, `fail  the age key file <path> is not a regular file`, `fail  the age key file <path> cannot be read` | Operator | Use the key request of [[dev-sk-nsec-request_value]] (step 4): step 1a for a missing key file with no other key source, step 1c for a file that exists but cannot be used. Do not ask the operator to replace an existing file with `secrets keygen`. Do not make a key. |
    | Key | `warn  no age key file at <path>; SOPS can decrypt with <source>` | — | SOPS has another key source (`SOPS_AGE_KEY`, `SOPS_AGE_KEY_CMD`, or the SOPS default key file). Nothing to fix for SOPS. Report it once. Do not read `SOPS_AGE_KEY`, and do not run the command of `SOPS_AGE_KEY_CMD`. |
    | Key | `skipped  the public key of SOPS_AGE_KEY_CMD (the CLI does not run the command)` | — | The key of this machine is unknown to `doctor`. See the `unknown` rows. |
    | Key | `key file <path> has mode <mode>: other users can read it` | Operator | Give the remedy (`chmod 600 <path>`). Do not change the key file. |
    | Key | another `fail` | Operator | Give the message. |
-   | Store | `this machine is not a recipient of the store` | Operator | Look at the Key section first. When it has a `fail`, use that row. When the Key section shows a public key, the key file exists: use the key request of [[dev-sk-nsec-request_value]] (step 4). You get the public key with `secrets keygen --public`. The operator does not make a new key. An admin adds it with `secrets recipient add`. |
+   | Store | `this machine is not a recipient of the store` | Operator | Look at the Key section first. When it has a `fail`, use that row. A doctor public key can come from another SOPS source. Use [[dev-sk-nsec-request_value]] (step 4). Use `secrets keygen --public` only without `--file`. If it fails, follow step 1c of that request. The operator does not make a new key. An admin adds it with `secrets recipient add`. |
    | Store | `warn  this machine as a recipient: unknown (SOPS_AGE_KEY_CMD gives the key, and doctor does not run it)` | — | This is not proof that this machine is not a recipient. A `secret <cmd>` run shows if the key decrypts. Report it. Do not request a new key. |
    | Mapping | `skipped  <env>: the access is unknown (doctor does not run SOPS_AGE_KEY_CMD)` | — | The same as the row above. |
-   | Store | `ok  cached revision …: doctor reads the clone offline, so it can be older than the remote` | Agent | Normal. For a current result, run `secrets doctor --online` (or `secrets store sync`, then `doctor`). |
+   | Store | `ok  cached revision …: doctor reads the clone offline, so it can be older than the remote` | Agent | Normal. After the plain check, run `secrets doctor --online` with the same options. For recipient changes, use `secrets store sync <local store name>` for a checked store, then plain `doctor`. |
    | Store | `fail  --online: cannot refresh the clone: …` and `warn  cached revision …: the refresh failed, …` | Agent, then operator | Give the exact line. The cause can be the network, the remote, the local clone, or the access. Retry once. Then report. |
    | Store | `fail  <file> is a symbolic link (<path>)`, `fail  <file> is committed as a symbolic link (mode 120000) (<path>)`, `fail  <file> is committed as a folder (<path>)`, `fail  <file> is not a regular file (<path>)` | Operator | A store file is a link or a special file. `doctor` then skips the other checks of that store. Give the lines. The repair is an operator task (in a checkout of the store: `git rm` the link, commit, push; then `secrets store fix-config`). Do not change the clone. |
    | Store | `✘ The stores folder <path> is a symbolic link …` | Operator | Give the message. Do not move or link folders in the secrets home. |
    | Store | `.sops.yaml does not match recipients.toml: …` | Operator | Give the line. `doctor` shows that the two files do not agree. It does not show which file changed. Do not run `secrets store fix-config`. |
    | Store | `warn  .gitleaks.toml is missing`, `warn  .gitleaks.toml differs from the text that the CLI generates` | Operator | Give the remedy line (`secrets store fix-config --store <name>`). It is an operator command. |
+   | Store | `ok  .gitleaks.toml allows only the age public keys in recipients.toml` | — | The configuration matches the generated text. This line is not a result from a gitleaks scan. |
    | Store | a problem of a store file, or `group <group> has no recipient` | Operator | Give the message. |
    | Store | `the store has no recovery key` | Operator | Give the remedy line. |
    | Store | `a stale lock of process <pid>` | Agent | The next CLI command removes it. Run your command again. Do not delete the lock file. |
@@ -61,7 +62,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    | Stores | `there is no store on this machine` | Operator | With no mapping, the operator decides which store to clone or create. |
    | Mapping | `<env>: <VAR> → secret://<name> is not in the store` | Operator | Request the value with [[dev-sk-nsec-request_value]]. For `preview`, a dev value is enough. |
    | Mapping | `<env>: no access (this machine is not in group <group>)` (skipped) | — | Normal when this machine does not need that environment. Report it only when the task needs that environment. |
-   | Mapping | `<env>: sops decrypt failed …` | Operator | The key file is usable, but SOPS did not decrypt the file with it. Give the line. See the Key and Store rows. |
+   | Mapping | `<env>: sops decrypt failed …` | Operator | SOPS did not decrypt the file with the available key sources. This error does not prove that the selected key file is valid. Give the line. See the Key and Store rows. |
    | Mapping | `<VAR> goes to convex: a NEXT_PUBLIC_ variable is for the browser build` | Agent | Remove only `convex` from the targets of that entry. Keep the rest. See step 5. |
    | Mapping | `<VAR>: the literal in <file> looks like a secret` | Operator | A value can be in a committed file. Do not repeat it. Follow [[dev-knw-nsec-rules]] § If a value leaks. |
    | Mapping | `<path> is not valid:` with a list of problems | Agent | Fix each named entry of `secrets.toml` or `secrets.local.toml`. The problems name fields, not values. |
@@ -90,7 +91,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
 6. **Read the identity.** Run `secrets whoami` when the problem is access.
    - A `key` row with ``no key (run `secrets keygen`)`` means that the CLI cannot read a public key from the key file. The file can be missing, not readable, or not valid. Run `secrets doctor` and use its Key line.
    - A `store` row `<name>  <id> in groups <groups>` gives the groups of this machine. A machine in the group `dev` only cannot open `prod` or `deploy`.
-   - A `store` row `<name>  not a recipient` means that the store does not have the key of this machine.
+   - A `store` row `<name>  not a recipient` means that whoami found no matching public key from the selected CLI key file. It does not check all SOPS key sources. Use doctor before you infer missing access.
    - A `store` row ``<name>  cannot read the clone (run `secrets doctor`)`` means that a clone file cannot be read. Run `secrets doctor`.
    - The `Account` part is optional. "Not logged in" and ``Run `secrets login` to authenticate.`` are not a problem. No command needs a login, and `login` is an operator command.
    - For the full public key of this machine, run `secrets keygen --public`. It makes no key.
@@ -100,7 +101,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    - `secrets: there is no store on this machine` means that no store is cloned in this secrets home.
    - A folder `.removing-<name>-<random>` in the stores folder is the rest of a failed `store remove`. Report it to the operator. Do not delete it.
    - An unwanted clone (for example in the wrong secrets home) goes to the operator: only the operator runs `secrets store remove <name>`.
-8. **Read the output of `secrets store sync`.**
+8. **Read the output of `secrets store sync <local store name>`.**
    - `<store>  up to date @ <revision>` or `<store>  <old> → <new>`: normal.
    - `secrets: store <name> had <n> unpushed commit(s) from an interrupted command. They are removed; …` or `secrets: store <name> had changed files from an interrupted command. They are removed.`: the refresh reset the clone. Report it. Any refresh can print these lines (`secret`, `export`, `store sync`, `doctor --online`).
    - `The history of the remote changed (a forced push).`: tell the operator.

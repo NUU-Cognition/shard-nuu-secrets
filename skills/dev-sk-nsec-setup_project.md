@@ -60,7 +60,7 @@ Map the environment variables of one app to secret names and literals in a commi
    secrets.local.toml
    ```
    When Git tracks an example file such as `.env.example`, add `!.env.example` after `.env*`.
-9. **Run the checks.** In the app folder, run `secrets doctor` with one `--env` for each environment that the task needs, for example `secrets doctor --env dev`. Without `--env`, `doctor` checks `dev`, `preview`, and `prod`. Without `--online`, `doctor` reads the cached clone, and the line `cached revision <revision> (<date>)` says how old it is. When the network is available, use `secrets doctor --online --env <env>` for a current result. Act on the result with [[dev-sk-nsec-diagnose]].
+9. **Run the checks.** In the app folder, run `secrets doctor` with one `--env` for each environment that the task needs, for example `secrets doctor --env dev`. Without `--env`, `doctor` checks `dev`, `preview`, and `prod`. Without `--online`, `doctor` reads the cached clone, and the line `cached revision <revision> (<date>)` gives the cached commit and its commit date. It does not give the last refresh time. After this plain check, when the network is available, run the same check with `--online` for a current result. Act on the result with [[dev-sk-nsec-diagnose]].
    - The `Mapping` section gives `fail` for each required `ref` that has no value: `<env>: <VAR> → secret://<name> is not in the store`.
    - An `optional` ref with no value is not a `fail`. The `ok` line counts it: `<env>: <n> of <m> refs found (<k> optional not set)`.
    - A `fail` in an environment that the task does not need is not a blocker of the task. Report it separately to the operator.
@@ -69,7 +69,7 @@ Map the environment variables of one app to secret names and literals in a commi
 10. **Request the values.** For each missing value, give the operator the command with [[dev-sk-nsec-request_value]].
     - `preview` reads the dev value when it has no own value. The operator writes a preview value only when it must be different from dev. `doctor` also gives `fail` for `preview` when the dev value is missing: one dev value fixes both.
     - Request `prod` values only when the task needs production.
-11. **Check again.** After the operator writes the values, run `secrets doctor --online --env <env>` for the environments of the task. Plain `doctor` reads the cached clone, which does not have the new values yet. Then run the app with [[dev-sk-nsec-run_app]].
+11. **Check again.** After the operator writes the values, run plain `secrets doctor` for the environments of the task. Keep the lines about local changes, unpushed commits, and links. Then add `--online` and run the same check. A successful write on this machine already updates its clone. A write on another machine can require a refresh. Then run the app with [[dev-sk-nsec-run_app]].
 12. **Commit.** Commit `secrets.toml` and `.gitignore` with the normal commit process of the repository. Never commit `secrets.local.toml` or a `.env*` file with values.
 
 # Output
@@ -77,4 +77,4 @@ Map the environment variables of one app to secret names and literals in a commi
 - A committed `secrets.toml` with one entry for each variable of the app (names, targets, and literals only)
 - `.gitignore` that covers `.env*` and `secrets.local.toml`
 - A list of the missing values, with one `secrets set` command for each, sent to the operator
-- After the operator wrote the values: a `secrets doctor --online --env <env>` result with no `fail` for each environment that the task needs
+- After the operator wrote the values: a plain `secrets doctor --env <env>` check, then the same check with `--online`, with no `fail` for each environment that the task needs

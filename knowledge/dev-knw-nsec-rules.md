@@ -75,8 +75,8 @@ Other processes can read the arguments of a process. A program must read a value
 - Do not read or print the variable `SOPS_AGE_KEY`: it can hold a private key. Do not run the command of `SOPS_AGE_KEY_CMD`.
 - Do not decrypt a store file. Do not run `sops` on a store file. An error of `secret` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
 - Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, or `stores.toml` by hand.
-- Do not run Git commands in a store clone, and do not delete a store clone. Do not delete a `.removing-*` folder in the stores folder: report it to the operator. To refresh the store clones, run `secrets store sync` or `secrets doctor --online`.
-- Do not move, link, or replace folders in the secrets home. The CLI refuses a symbolic link below the secrets home and a store file that is not a regular file. Report such a message to the operator.
+- Do not run Git commands in a store clone, and do not delete a store clone. Do not delete a `.removing-*` folder in the stores folder: report it to the operator. To refresh a store clone, first run plain `secrets doctor` for that store (Rule 6). Then run `secrets store sync <name>`, or `secrets doctor --online` with the same options.
+- Do not move, link, or replace folders in the secrets home. Managed-clone checks refuse linked folders below the real secrets home. Store-file checks refuse non-regular files. Not every metadata command runs every check. Report each refusal to the operator.
 
 ## Rule 5 — Operator-only commands
 
@@ -100,15 +100,17 @@ For `secrets set` and `secrets edit`, the operator types the values in their own
 
 ## Rule 6 — Commands that you can run
 
+When interrupted local work can matter, run plain `secrets doctor` before a refresh. Keep its lines about unpushed commits, changed files, and links. Check every store that the refresh will affect. Use the same options for plain and online doctor. Use `secrets store sync <name>` for a checked store. After operator work, run the plain check again before a refresh.
+
 | Command | Use |
 |---|---|
 | `secret <cmd>`, `secrets run` | Run a program with the values in its process environment. See [[dev-sk-nsec-run_app]]. |
 | `secrets doctor` | Check the tools, the key, the stores, the mapping, and the project. Without `--online`, it changes nothing. See [[dev-sk-nsec-diagnose]]. |
-| `secrets doctor --online` | The same checks after a refresh: it fetches each checked clone and resets it to the remote. The reset discards the local changes of an interrupted command in the clone (a cache that the CLI owns). It never clones a missing store. |
+| `secrets doctor --online` | The same checks after a refresh: it fetches each checked clone and resets it to the remote. The reset discards the local changes of an interrupted command in the clone (a cache that the CLI owns). It never clones a missing store. Run it only after a plain `secrets doctor` with the same options. |
 | `secrets keygen --public` | Print the full public key of the key file of this machine. It makes no key and never prints the private key. Use it only with no `--file`. |
 | `secrets whoami` | Show the recipient id, the key fingerprint, and the stores of this machine. |
 | `secrets store list` | List the store clones of this machine (no values). |
-| `secrets store sync` | Refresh the store clones. |
+| `secrets store sync <name>` | Refresh one store clone that a plain `secrets doctor` checked first. Always name the store. |
 | `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secret` without `--offline` clones the store when necessary. |
 | `secrets init-project`, `secrets bind` | Write `secrets.toml`: names and targets, no values. See [[dev-sk-nsec-setup_project]]. |
 | `secrets export` | Only under the conditions below. |
