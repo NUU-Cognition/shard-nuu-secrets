@@ -72,7 +72,7 @@ Shows what `secrets push` sends to a platform: the names and their sources, neve
 | `--mapping <path>`, `--project <name>`, `--store <name>` | As for `secrets run`. |
 
 - `plan` reads the entries of the target (each `[env]` entry whose `to` has the target), with their values of the environment, and the credentials in `deploy.enc.yaml`. It never uses `secrets.local.toml` for a platform.
-- `plan` decrypts the store values and the credentials **in memory**: it needs a key in group `deploy`. With a key that is not in group `deploy`, each credential is `no access`, and an `error` line says `this machine cannot open deploy.enc.yaml: …`. This is expected. It is not a permission to add access.
+- `plan` decrypts the store values and the credentials **in memory**: it needs a key in group `deploy`. With a key that is not in group `deploy`, each credential is `no access`, and an `error` line says `this machine cannot open deploy.enc.yaml: …`. A decrypt error gives the same status, so `no access` alone does not prove the membership. It is not a permission to add access.
 - Without `--offline`, `plan` refreshes the store clone (fetch and reset), as `secret <cmd>` does. Follow the refresh rule of [[dev-knw-nsec-rules]] § Rule 6, or use `--offline`.
 - A successful plan does not prove that a push passes. `plan` cannot see the state of the platform: the Vercel variables of other environments, the Railway reference variables, or an identifier collision ([Known limits](#known-limits), items 9 and 10).
 - Steps: [[dev-sk-nsec-plan_push]].
