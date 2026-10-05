@@ -57,6 +57,7 @@ Run a program (a dev server, a test, a script) with the variables of its project
     | `0` | The program succeeded. | Continue. |
     | `1` with `✘ <n> variable(s) have no value in env <env>` | Values are missing. Nothing ran. | Use [[dev-sk-nsec-request_value]] for each listed name. |
     | `1` with `✘ There is no secrets.toml …` | No mapping here. | Go to the project folder, or use [[dev-sk-nsec-setup_project]]. |
+    | `1` with `✘ <path> is not valid:` | A mapping problem. A `[targets.*]` table that is not valid also stops `secret <cmd>`. | Run `secrets doctor` and use [[dev-sk-nsec-diagnose]]. |
     | `1` with `✘ No usable age key: …` | The key file is missing, not a regular file, or cannot be read. Nothing ran. | Tell the operator the path. Do not make a key. Use [[dev-sk-nsec-request_value]] (the key request). |
     | `1` with `✘ sops decrypt failed …` | SOPS did not decrypt the file with the available key sources. This error does not prove that the selected key file is valid. | Use [[dev-sk-nsec-diagnose]]. Do not run `sops`. |
     | `1` with `✘ --offline: … has no cached clone …` | `--offline` and no clone. Nothing ran. | See step 4. |

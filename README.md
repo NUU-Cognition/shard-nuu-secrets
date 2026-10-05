@@ -18,6 +18,7 @@ This folder is the remote source of the shard (shorthand `nsec`, package `@nuuco
 - `skills/dev-sk-nsec-setup_project.md` — write the mapping of a project.
 - `skills/dev-sk-nsec-diagnose.md` — act on `secrets doctor`, `whoami`, and `store list|sync`.
 - `skills/dev-sk-nsec-request_value.md` — ask the operator for a value or a key.
+- `skills/dev-sk-nsec-plan_push.md` — run `secrets plan` and give the operator the `plan` and `push` commands.
 
 ## Load
 
@@ -34,4 +35,4 @@ Edit the files of this folder. Then build the shard again:
 flint shard build nuu-secrets
 ```
 
-The command facts come from the `secrets` CLI at canon `c1f8b20` (`secrets --help` and the README of `NUU-Cognition/secrets`). When the CLI changes, check each command, option, and message of the knowledge files and the skills again.
+The command facts come from the `secrets` CLI at canon `10f612f` (`secrets --help` and the README of `NUU-Cognition/secrets`). When the CLI changes, check each command, option, and message of the knowledge files and the skills again.

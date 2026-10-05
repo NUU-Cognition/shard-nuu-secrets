@@ -4,7 +4,7 @@ description: "The secrets CLI for agents: each command and its options, the outp
 
 # Knowledge: The `secrets` CLI
 
-The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. `ndv` links both commands. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `c1f8b20`.
+The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. `ndv` links both commands. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `10f612f`.
 
 ## Commands for agents
 
@@ -54,6 +54,59 @@ Prints the variables and their **values** to stdout. It writes no file with a pl
 
 - With `--format dotenv`, when the set has a variable named `__proto__`, stderr has a warning: `secrets: warning: the dotenv npm package loses the variable __proto__ when it reads this text. …`. The output still has the variable.
 - An agent uses `secrets export` only under the conditions of [[dev-knw-nsec-rules]] § Conditions for `secrets export`.
+
+### `secrets plan`
+
+```sh
+secrets plan <vercel|convex|railway> --env dev|preview|prod [--json] [--offline] [--mapping <path> | --project <name>] [--store <name>]
+```
+
+Shows what `secrets push` sends to a platform: the names and their sources, never a value. It calls no platform. The exit status is 1 when the plan has an error.
+
+| Option | Meaning |
+|---|---|
+| `<target>` | `vercel`, `convex`, or `railway`. The mapping needs the `[targets.<target>]` table. |
+| `--env <env>` | Required. `dev`, `preview`, or `prod`. `--env deploy` is refused: `deploy.enc.yaml` holds the credentials. |
+| `--json` | One JSON value with the same facts (no values). |
+| `--offline` | Use the cached store clone. No network call, and no clone when there is none. |
+| `--mapping <path>`, `--project <name>`, `--store <name>` | As for `secrets run`. |
+
+- `plan` reads the entries of the target (each `[env]` entry whose `to` has the target), with their values of the environment, and the credentials in `deploy.enc.yaml`. It never uses `secrets.local.toml` for a platform.
+- `plan` decrypts the store values and the credentials **in memory**: it needs a key in group `deploy`. With a key that is not in group `deploy`, each credential is `no access`, and an `error` line says `this machine cannot open deploy.enc.yaml: …`. This is expected. It is not a permission to add access.
+- Without `--offline`, `plan` refreshes the store clone (fetch and reset), as `secret <cmd>` does. Follow the refresh rule of [[dev-knw-nsec-rules]] § Rule 6, or use `--offline`.
+- A successful plan does not prove that a push passes. `plan` cannot see the state of the platform: the Vercel variables of other environments, the Railway reference variables, or an identifier collision ([Known limits](#known-limits), items 9 and 10).
+- Steps: [[dev-sk-nsec-plan_push]].
+
+The text form:
+
+```
+store    <store> @ <revision> (<date>)
+target   vercel · project <project> · env dev → development
+key      deploy.enc.yaml → vercel/token    ok
+key      deploy.enc.yaml → vercel/team-id  ok (optional)
+set      API_KEY     ← app/api-key
+set      LOG_LEVEL   ← literal
+remove   OPT_SECRET  ← app/none (empty, optional)
+3 variables · 0 errors
+```
+
+- `set` sends the value of a `ref`, or a literal. `remove` removes an `optional` entry that has no value or an empty value in the environment. On a Railway `remove` line, the plan adds `Railway can start a deployment for a removal`.
+- The status of a credential (`key` line) is `ok`, `missing`, `empty`, `not valid`, `no access`, or `not set` (an optional credential with no value).
+- An `error` line: a required `ref` with no value or with an empty value, an empty literal, no access to `deploy.enc.yaml`, or a Railway environment with no entry (`targets.railway.environments has no entry for env <env>: …`). A credential that is `missing`, `empty`, `not valid`, or `no access` is also an error.
+- The last line counts the variables and the errors.
+
+The credentials (in `deploy.enc.yaml`, environment `deploy`, group `deploy`):
+
+| Target | Credential | Note |
+|---|---|---|
+| `vercel` | `vercel/token` | Required. A Vercel access token. |
+| `vercel` | `vercel/team-id` | Optional. The team id `team_…`. It is not secret. Without it, the requests go to the personal account of the token. |
+| `convex` | `convex/<deployment>/<env>` | Required. A **typed** deploy key of that deployment: `prod:…` for `prod`, `dev:…` for `dev` and `preview`. A key with no type, a preview deploy key, and a project token are refused. |
+| `railway` | `railway/token` | Required. A Railway account token or workspace token, not a project token. |
+
+The operator writes each credential with `secrets set <name> --env deploy`. Agents never write a credential.
+
+The environments: Vercel `dev → development`, `preview → preview`, `prod → production`. Convex: the deploy key `convex/<deployment>/<env>` selects the deployment. Railway: the `environments` table of `[targets.railway]`; an environment with no entry is an error.
 
 ### `secrets doctor`
 
@@ -146,6 +199,7 @@ Do not run these commands. The one exception is in [[dev-knw-nsec-rules]] § Rul
 | `secrets store fix-config` | `--store`, `--mapping` | Writes the generated `.sops.yaml` (from `recipients.toml`) and `.gitleaks.toml` when one is missing or changed: one commit and one push. stdout: `fixed  <file> of store <name> @ <revision>` for each file, or `unchanged  …`. It refuses a store file that is a symbolic link: the operator first removes the link in a checkout of the store (`git rm`, commit, push). |
 | `secrets store remove <name>` | none | Removes the clone folder of a store and its entry in `stores.toml` (local state). See below. |
 | `secrets login`, `secrets logout` | `login --verbose` | The optional NUU account. |
+| `secrets push <target> --env <env>` | `--yes` (required for `--env prod`), `--mapping`, `--project`, `--store` | Sends the mapped variables of one environment to a platform. Every environment is an operator push. See below. |
 
 A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks the clone and applies the change to the newest remote state. When the store changes, it makes one commit and pushes it, and it reports success only after the remote accepts the push. When nothing changes (for example `unchanged`), it makes no commit.
 
@@ -166,10 +220,41 @@ A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks t
 - After the removal, when the old working folder does not exist any more, stderr says `secrets: the old working folder <path> does not exist any more. The removal is done.` (exit 0).
 - A removal that fails late can leave a folder `.removing-<name>-<random>` in the stores folder. This folder is not routine cleanup. Agents do not delete it: report it to the operator.
 
+### `secrets push <target>` (operator)
+
+```sh
+secrets push <vercel|convex|railway> --env dev|preview|prod [--yes] [--mapping <path> | --project <name>] [--store <name>]
+```
+
+Sends the mapped variables of one environment to a platform. It is an operator command for every environment ([[dev-knw-nsec-rules]] § Rule 9). An agent gives the operator the exact `plan` and `push` commands, and never adds `--yes`.
+
+- `--env prod` needs `--yes`: each push to production needs the approval of the operator. Without `--yes`, the push stops before it reads anything (exit 2): `✘ secrets push <target> --env prod changes production. Each push to production needs the approval of the operator. Nothing was read or sent.` There is no prompt.
+- `push` makes the plan first. When the plan has an error, it sends nothing (exit 1): `✘ secrets push <target> --env <env>: the plan has <n> error(s). Nothing was sent.`
+- `push` always refreshes the store clone. It has no `--offline`.
+- `push` changes only the variables of the plan. It never changes or removes another variable of the platform. A Railway reference variable (`${{…}}`) is never overwritten or removed.
+- The output has one line for each variable, then a summary `push <target> · env <env>: …`. No line shows a value or a token:
+  - `set <VAR>` and `removed <VAR>`: the platform confirmed the write;
+  - `unchanged <VAR>`: the platform has the value already, or has no variable to remove;
+  - `skipped <VAR> (reference variable)`: a Railway reference variable; this is not a failure, but the store value is not on the platform;
+  - `failed <VAR> (<reason>)`: the platform refused the write, or the push did not send it;
+  - `uncertain <VAR> (<reason>; the platform can have the change)`: the request was sent, but the answer did not confirm it.
+- After the first failed or uncertain write, the push sends nothing more. The exit status is 0 only when each write is confirmed. stderr names the confirmed writes (`secrets: confirmed writes: …`) and the uncertain writes (`secrets: uncertain writes: …: the platform can have the change.`). With an uncertain write, stderr says `secrets: Check each uncertain variable on the platform before you run the push again.`
+- An error shows a fixed text and the HTTP status, for example `an error that the CLI does not know (HTTP <status>)`. The CLI never shows a message, a code, a request id, the body, or a header of an answer.
+- An identifier from an answer (a Vercel variable id, a Railway project, service, or environment id, the Convex deployment URL) must hold no credential and no store value of the push, of any length. Else the push stops before that request: `… from the platform holds the credential <name>`, or `… from the platform holds the value of <VAR> (a value that is not secret can be a literal in secrets.toml)`. A literal of `secrets.toml` is public, so it is not checked.
+
+After the push, the effect on each platform:
+
+| Target | Effect |
+|---|---|
+| `vercel` | Only a new deployment reads the new values of `preview` and `production`. The push prints a `next` line with the deploy command (`vercel deploy --prod` or `vercel deploy`). `development` needs no deployment. `push` does not deploy, and an agent does not deploy. `vercel env pull` writes a file with values: it is never an agent step. |
+| `vercel` | A variable of the same name that covers the environment and also another environment or a custom environment is shared: the push sends nothing and fails. The operator changes it in Vercel. A new production variable has the type `sensitive`. |
+| `convex` | The deployment reads the new values at once. No deployment is necessary. One request carries all changes; any end other than a complete HTTP 200 makes the whole batch uncertain. |
+| `railway` | Set variables are saved with `skipDeploys` (no deployment). A removal is one request, and `Railway can start a deployment for a removal`. The `next` line asks for a deployment of the service with the new values. |
+
 ## Output rules
 
-- Normal output never shows a value. The one exception is the stdout of `secrets export`.
-- Results go to stdout: tables, `added …` lines, the `doctor` report, the public key of `keygen --public`.
+- Normal output never shows a value. The one exception is the stdout of `secrets export`. `secrets push` sends values to a platform and prints names only.
+- Results go to stdout: tables, `added …` lines, the `doctor` report, the `plan` lines, the `push` lines, the public key of `keygen --public`.
 - Diagnostics go to stderr: the `secret:` line, notices that start with `secrets:`, and errors. A CLI error starts with `✘`. It can have remedy lines, but not always. An error of the option parser starts with `error:`, for example `error: unknown option '--bad'` or `error: required option '--format <format>' not specified`.
 - Output names only public facts: variable names, secret names, store names, project names, recipient ids, public keys and key fingerprints, file names, paths, and line numbers.
 - The CLI never shows the content of a store file, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `secrets.toml`, `secrets.local.toml`, `stores.toml`, a `.env` file, or the target of a symbolic link. SOPS and Git errors are a fixed summary. A URL is shown without its user information.
@@ -179,8 +264,8 @@ A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks t
 | Status | Meaning |
 |---|---|
 | `0` | Success. |
-| `1` | An error. This includes the errors of the option parser: an unknown option, a missing required option, or an unknown command. `secrets doctor` exits 1 when a check fails. |
-| `2` | With `✘ No command to run.`: `secret` or `secrets run` with no command. The program did not start. |
+| `1` | An error. This includes the errors of the option parser: an unknown option, a missing required option, or an unknown command. `secrets doctor` exits 1 when a check fails. `secrets plan` exits 1 when the plan has an error. `secrets push` exits 1 for a plan error, a failed write, or an uncertain write. |
+| `2` | With `✘ No command to run.`: `secret` or `secrets run` with no command. The program did not start. With `✘ secrets push <target> --env prod changes production. …`: `secrets push --env prod` without `--yes`. Nothing was read or sent. |
 | `3` | A conflict in a write: another machine changed the same name to a different value. Nothing was written. (Writes are operator commands.) |
 | `126` | `secret <cmd>`: the command is not executable. |
 | `127` | `secret <cmd>`: the command is not on `PATH`. Any command: a required program (`sops`, `age-keygen`, `git`) is not on `PATH`. |
@@ -201,6 +286,14 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 | `✘ The stores folder <path> is a symbolic link. The CLI follows no symbolic link below the secrets home. Nothing was changed.` | `stores/` in the secrets home is a link. | Report the path to the operator. Do not move or link folders. |
 | `✘ Store <name> has a file that is not a regular file. Nothing was read.` (or `written`, `cloned`) with lines `- <file> is a symbolic link`, `- <file> is committed as a symbolic link (mode 120000)`, `- <file> is committed as a folder`, or `- <file> is not a regular file` | A store file is a link or a special file. The CLI reads and writes no store file through a link. | Report the lines to the operator. The repair is an operator task. |
 | `secrets: warning: the dotenv npm package loses the variable __proto__ …` | `export --format dotenv` has a variable named `__proto__`. | Do not use the dotenv format for it. |
+| `✘ <path> is not valid:` with `- targets.<target>: …` or `- env.<VAR>.to: "convex" is not allowed: the Convex tool owns <VAR>, …` | A `[targets.*]` table or a Convex target is not valid. Every command of the project stops, also `secret <cmd>`, `run`, and `export`. | Run `secrets doctor`. Fix the table only when the operator or the task gives its content (Rule 8). Else report it. |
+| `✘ <path> has no [targets.<target>] table.` | `plan` or `push` for a target with no table. | Report it. Do not add the table on your own (Rule 8). |
+| `✘ --env deploy: plan and push deliver dev, preview, prod.` | `deploy.enc.yaml` holds the credentials and is never delivered. | Use `dev`, `preview`, or `prod`. |
+| `error    this machine cannot open deploy.enc.yaml: …` (a `plan` line) | The key of this machine is not in group `deploy`. The credentials show `no access`. | Expected for such a key. It is not a permission to add access. Report it. |
+| `✘ secrets push <target> --env prod changes production. Each push to production needs the approval of the operator. Nothing was read or sent.` | `push --env prod` with no `--yes` (exit 2). | Agents do not run `push`. Give the operator the `plan` and `push` commands ([[dev-sk-nsec-plan_push]]). |
+| `✘ secrets push <target> --env <env>: the plan has <n> error(s). Nothing was sent.` | The plan has errors (exit 1). | Run `secrets plan <target> --env <env>` and act on each error. |
+| `secrets: Check each uncertain variable on the platform before you run the push again.` | A push has uncertain writes (exit 1). | Never run the push again. Show the confirmed and the uncertain writes to the operator. |
+| `… from the platform holds the value of <VAR> (a value that is not secret can be a literal in secrets.toml)` or `… holds the credential <name>` | An id of the platform holds a store value or a credential. The push stopped before that request. | The operator decides. Never move a secret value into `secrets.toml`. |
 | `✘ There is no secrets.toml in this folder or a parent folder.` | No mapping. | Go to the project folder, or use `--mapping` or `--project`. A new project: [[dev-sk-nsec-setup_project]]. |
 | `✘ No command to run.` | `secret` with no command (exit 2). | Give the command. |
 | `error: unknown option '<option>'` | The option parser refused an option (exit 1). | Fix the option. An option for the program goes after the program name. |
@@ -213,7 +306,7 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 
 ## Known limits
 
-These limits are in the current build (`secrets` canon `c1f8b20`).
+These limits are in the current build (`secrets` canon `10f612f`).
 
 1. **The `dotenv` npm reader loses `__proto__`.** The `dotenv` package loses a variable named `__proto__` when it reads text. `secrets export --format dotenv` warns on stderr and still prints the variable. Do not name a variable `__proto__`. When a program needs one, use `--format json`, `--format shell`, or `secret <cmd>`.
 2. **The secret check of literals is not complete.** `bind` and `doctor` find a known key prefix (for example `sk_live_`), a key block, a JWT, a URL with a password, a high-entropy string of 24 or more characters, and a random token of 16 to 23 letters and digits of one letter case. In the tests of the CLI, the check found about 94% of random base36 tokens and 99.5% of random hex tokens of that length. It misses tokens with few changes between letters and digits (for example 15 letters and 1 digit) and mixed-case tokens shorter than 24 characters. A UUID and a 40-character lowercase hex string (the form of a Git commit SHA) pass, except when a word of the variable name is `SECRET`, `SECRETS`, `TOKEN`, `TOKENS`, `PASSWORD`, `PASSWD`, `PRIVATE`, `CREDENTIAL`, `CREDENTIALS`, `KEY`, `KEYS`, `APIKEY`, or `SALT`. The CLI splits the name into words at `_` and at other characters that are not letters or digits. A camelCase name such as `apiToken` is one word, so a UUID passes there. Do not rely on the check: when a value can be secret, it is not a literal.
@@ -222,4 +315,7 @@ These limits are in the current build (`secrets` canon `c1f8b20`).
 5. **A platform export reads `secrets.local.toml`.** `export --to vercel|convex|railway` does not use the local entries, but a `secrets.local.toml` that is not valid stops it (exit 1).
 6. **`doctor` does not run `SOPS_AGE_KEY_CMD`.** When `SOPS_AGE_KEY_CMD` gives the key, `doctor` says `warn  this machine as a recipient: unknown (…)` and `skipped  <env>: the access is unknown (…)`. This is not proof that this machine is not a recipient. An exit status 0 of `doctor` also does not prove that the command gives a valid key. A `secret <cmd>` run shows if the key decrypts.
 7. **A late failure of `store remove` can leave a `.removing-*` folder.** The folder `.removing-<name>-<random>` in the stores folder holds the old clone. The operator recovers or deletes it by hand. Agents do not delete it.
-8. **A refresh can remove a local link before a check.** `doctor` (without `--online`) refuses a store file that is a symbolic link in the work tree of the clone. A command that refreshes first (`secret`, `export`, `store sync`, `doctor --online`) resets the work tree and can then use the regular file of the remote. A later success does not show that the clone had no link. Report each `doctor` line about a link.
+8. **A refresh can remove a local link before a check.** `doctor` (without `--online`) refuses a store file that is a symbolic link in the work tree of the clone. A command that refreshes first (`secret`, `export`, `plan` without `--offline`, `push`, `store sync`, `doctor --online`) resets the work tree and can then use the regular file of the remote. A later success does not show that the clone had no link. Report each `doctor` line about a link.
+9. **A plan cannot see the platform.** `secrets plan` calls no platform. It cannot see the Vercel variables of other environments (a shared variable fails the push), the Railway reference variables (`skipped`), or an identifier collision (item 10). A successful plan does not prove that the push passes.
+10. **A short store value can stop a push.** The identifier check finds a credential or a store value of any length inside an id of the platform. A short value, for example `1`, can be inside an ordinary UUID by chance. Then the push stops before its first write. The operator decides. A value that is not secret can become a literal in `secrets.toml`, which is public and is not checked. A short value that is secret stays in the store, also when this rule stops the push. Agents never move a secret value into `secrets.toml`.
+11. **The platform APIs are not proven live.** The tests of the CLI use fake platform servers with the documented API forms. The first push to each live platform is the proof. `Railway can start a deployment for a removal`: Railway documents no control that stops it.

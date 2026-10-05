@@ -18,7 +18,7 @@ The complete rules are in [[dev-knw-nsec-rules]].
 1. Never print, log, echo, or type a value. This includes your result, an Orbh message, an update, the `blockers` key, a Mesh note, a commit message, and a test fixture.
 2. Never write a value to a file. Never pass a value as a process argument.
 3. Never read or copy the key file. Never decrypt or edit a store file. `secrets keygen --public` (with no `--file`) gives you the public key of this machine.
-4. Never run an operator-only command (`secrets set`, `edit`, `unset`, `keygen` except `keygen --public` with no `--file`, `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `login`, `logout`). The one exception: your prompt relays an instruction of the operator that names that exact command.
+4. Never run an operator-only command (`secrets set`, `edit`, `unset`, `keygen` except `keygen --public` with no `--file`, `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, `logout`). The one exception: your prompt relays an instruction of the operator that names that exact command. Never add `--yes` to a push.
 5. You are a user. The rules prevent accidents. They are not a security boundary.
 
 ## What Is Different in a Headless Session
@@ -29,7 +29,8 @@ The complete rules are in [[dev-knw-nsec-rules]].
    - `secret` stops with `✘ No usable age key: …`, or `doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`;
    - `--offline` stops with `… has no cached clone on this machine` and the task forbids network access;
    - a `doctor` item that only the operator can fix ([[dev-sk-nsec-diagnose]]);
-   - a tool needs a file with values.
+   - a tool needs a file with values;
+   - a push to a platform: only the operator runs `secrets push` ([[dev-sk-nsec-plan_push]]).
 
    For a blocker, do not invent a value. Do not use a placeholder that looks real. Do not remove the variable from the mapping to make the run pass. Do not skip the check and report success. Write the request with [[dev-sk-nsec-request_value]], set the `blockers` key, and deliver it as in [Result Delivery](#result-delivery).
 3. **Work that does not need the value goes on.** Finish the parts of the task that do not need the missing value. Then return with the blocker.
@@ -57,7 +58,8 @@ flint orbh session set blockers "clerk/secret-key (dev): no value in the store"
 | `secrets-setup` | You write `secrets.toml` and `.gitignore` ([[dev-sk-nsec-setup_project]]). |
 | `secrets-run` | You run a program with `secret` ([[dev-sk-nsec-run_app]]). |
 | `secrets-diagnose` | You run `secrets doctor` and act on it ([[dev-sk-nsec-diagnose]]). |
-| `secrets-blocked` | You wait for the operator: a value, a key, or an operator fix. |
+| `secrets-plan` | You run `secrets plan` and prepare the commands for the operator ([[dev-sk-nsec-plan_push]]). |
+| `secrets-blocked` | You wait for the operator: a value, a key, a push, or an operator fix. |
 
 ## Result Delivery
 
@@ -82,3 +84,4 @@ flint orbh session set blockers "clerk/secret-key (dev): no value in the store"
 | A project has no `secrets.toml`, or a variable has no entry | [[dev-sk-nsec-setup_project]] |
 | `secret` or `secrets` fails, or access is not correct | [[dev-sk-nsec-diagnose]] |
 | A value or a key is missing | [[dev-sk-nsec-request_value]], then return with the blocker |
+| Prepare a push to Vercel, Convex, or Railway | [[dev-sk-nsec-plan_push]], then return with the commands for the operator |

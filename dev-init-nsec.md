@@ -16,7 +16,8 @@ NUU Secrets keeps the secrets of a team in one encrypted Git store and gives the
 - **Groups.** A machine opens only the files of its groups (`dev`, `prod`, `deploy`). The group `dev` opens `dev` and `preview`.
 - **One `secrets.toml` for each project.** It is committed. It maps each variable to a secret name (`CLERK_SECRET_KEY = { ref = "secret://clerk/secret-key", to = ["local"] }`) or to a literal that is not secret. It holds no values.
 - **`secret <cmd>`.** It reads the store, decrypts in memory, and starts `<cmd>` with the values in its process environment. It writes no file with a plaintext value. A refresh or a first clone changes the Git files and the index of the store clone.
-- **The operator.** Only the operator enters values (`secrets set`) and manages keys. You ask the operator for them.
+- **Delivery to a platform.** `secrets plan <target> --env <env>` shows what a push sends to Vercel, Convex, or Railway: names and statuses only. `secrets push` sends the values. Only the operator runs `push`.
+- **The operator.** Only the operator enters values (`secrets set`), manages keys, and pushes to a platform (`secrets push`). You ask the operator for them.
 - **No account.** A NUU account is optional. No command needs a login. NUU hosts no secrets.
 
 The full model is in [[dev-knw-nsec-model]]. The command reference, the exit statuses, and the known limits are in [[dev-knw-nsec-cli]].
@@ -29,7 +30,7 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 2. Never write a value to a file. No `.env` file, no `secrets export … > file`. If a tool needs a file, stop and ask the operator.
 3. Never pass a value as a process argument. A program reads a value from its process environment.
 4. Never read or copy the key file (`$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`). For the public key, run `secrets keygen --public`. Never decrypt a store file. Never edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, or `recipients.toml`.
-5. Never run `secrets set`, `edit`, `unset`, `keygen` (except `keygen --public` with no `--file`), `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `login`, or `logout`, unless the operator asks for that exact command.
+5. Never run `secrets set`, `edit`, `unset`, `keygen` (except `keygen --public` with no `--file`), `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, or `logout`, unless the operator asks for that exact command. Never add `--yes` to a push.
 6. Ask the operator for a missing value with the exact command: `secrets set <name> --env <env>`. Never ask for a value in the chat.
 7. You are a user. You have the access of your operating-system user. The rules prevent accidents. They are not a security boundary.
 8. If a value leaks, stop, do not repeat it, and tell the operator the variable and the place. The operator replaces the value.
@@ -42,6 +43,7 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 | A project has no `secrets.toml`, or a variable has no entry | [[dev-sk-nsec-setup_project]] |
 | `secret` or `secrets` fails, or access is not correct | [[dev-sk-nsec-diagnose]] |
 | A value or a key is missing | [[dev-sk-nsec-request_value]] |
+| Prepare a push to Vercel, Convex, or Railway | [[dev-sk-nsec-plan_push]] |
 | A question about the store, names, targets, or literals | [[dev-knw-nsec-model]] |
 | A question about a command, an option, an exit status, or a message | [[dev-knw-nsec-cli]] |
 
@@ -67,6 +69,7 @@ secrets store list                       # the store clones of this machine
 secrets keygen --public                  # the public key of this machine; makes no key
 secrets init-project --name <project> --store <url>
 secrets bind <VAR> <name> --to local
+secrets plan <target> --env <env>        # what a push sends: names and statuses; no platform call
 ```
 
 Use the `secrets` command that is on `PATH`. Its build mode (prod or dev) changes the default secrets home. See [[dev-knw-nsec-model]] § The store.

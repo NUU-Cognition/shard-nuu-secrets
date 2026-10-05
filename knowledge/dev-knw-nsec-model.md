@@ -19,7 +19,7 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 | `dev.enc.yaml` | The development values. | `dev` |
 | `preview.enc.yaml` | The preview values that are different from dev. | `dev` |
 | `prod.enc.yaml` | The production values. | `prod` |
-| `deploy.enc.yaml` | The platform credentials. | `deploy` |
+| `deploy.enc.yaml` | The platform credentials of `secrets plan` and `secrets push`: `vercel/token`, `vercel/team-id`, `convex/<deployment>/<env>`, `railway/token`. | `deploy` |
 
 - SOPS encrypts each value with the data key of its file. The data key is encrypted for each recipient of the group of the file.
 - A recipient is the age key of one machine, with an id `<Name>@<machine>` and a list of groups. A machine opens only the files of its groups.
@@ -27,7 +27,7 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 - The CLI keeps the store clones in the secrets home: `$SECRETS_HOME`, else `<NUU home>/secrets/` for the prod build and `<NUU home>/secrets-dev/` for the dev build. The NUU home is `$NUU_HOME`, else `~/.nuucognition`. The list of clones is `<secrets home>/stores.toml`.
 - The secrets home and its ancestors can be symbolic links. Commands that check a managed clone refuse linked `stores/`, clone, or `.git` folders below the real secrets home. Not every metadata command runs that check. A successful `whoami` is not proof that these folders passed it. Use plain `secrets doctor` to check the clone.
 - Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, and each `*.enc.yaml`. The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once.
-- The store clone is a cache that the CLI owns. A refresh (`secret`, `export`, `store sync`, `doctor --online`) fetches it and resets it to the remote.
+- The store clone is a cache that the CLI owns. A refresh (`secret`, `export`, `plan` without `--offline`, `push`, `store sync`, `doctor --online`) fetches it and resets it to the remote.
 - A write that changes the store makes one Git commit and one push. A write with no change makes no commit. The operator does the writes, also `store fix-config` and `store remove` (see [[dev-knw-nsec-rules]] § Rule 5).
 
 You never open these files. The CLI reads them for you. See [[dev-knw-nsec-rules]] § Rule 4.
@@ -78,7 +78,7 @@ LOG_LEVEL        = { value = "info", to = ["local"] }
 | Part | Rule |
 |---|---|
 | `[project]` | Two fields only: `name` (a letter or a digit first, then letters, digits, `.`, `_`, or `-`; 100 characters or fewer) and `store` (the Git URL or the path of the store). The URL must not hold a credential: `secrets init-project` refuses such a URL. |
-| `[targets.<target>]` | One table for each platform target: `vercel`, `convex`, or `railway`. |
+| `[targets.<target>]` | One table for each platform target: `vercel`, `convex`, or `railway`. See [The target tables](#the-target-tables). |
 | `[env]` | One entry for each variable. The key is the variable name: letters, digits, and `_`, and not a digit first. |
 | `ref` | A reference `secret://<name>` to a value in the store. |
 | `value` | A literal: a value that is not secret. It is committed in plaintext. |
@@ -91,6 +91,30 @@ LOG_LEVEL        = { value = "info", to = ["local"] }
 - A `ref` entry with no value, and not `optional`, is an error. The error names the variable and the secret name. Nothing runs.
 - The CLI finds `secrets.toml` in the current folder or in a parent folder. `--mapping <path>` gives another file. `--project <name>` finds the `secrets.toml` with that project name under the root of the current Git repository. It skips `node_modules`, `.git`, and `dist*`.
 - The `store` of the mapping selects the store. When this machine has no clone of that store, `secret` clones it (a network access) and writes `secrets: cloning the store of <project> from <url>` on stderr. With `--offline`, it never clones: it stops with exit 1.
+
+## The target tables
+
+`secrets plan` and `secrets push` read the `[targets.<target>]` table of each platform target. The CLI checks each table when it loads the mapping.
+
+```toml
+[targets.vercel]
+project = "nuu-track"                    # a Vercel project name or id
+
+[targets.convex]
+deployment = "track"                     # one name segment: the deploy key is convex/track/<env>
+
+[targets.railway]
+project      = "nuu-discord-bot"         # a Railway project name or id
+service      = "bot"                     # a Railway service name or id
+environments = { prod = "production" }   # store environment → Railway environment name or id
+```
+
+- `[targets.vercel]` has `project` only. The team id comes from `vercel/team-id` in `deploy.enc.yaml`: a `team` field is an error.
+- `[targets.convex]` has `deployment`: one name segment (lowercase letters, digits, `_`, and `-`).
+- `[targets.railway]` has `project`, `service`, and `environments` (at least one entry; the keys are `dev`, `preview`, and `prod`). An environment with no entry cannot go to Railway.
+- A missing field, an unknown field, or a bad name is an error of the mapping. A table that is not valid stops **every** command of that project, also `secret <cmd>`, `run`, and `export`. Run `secrets doctor`: it names each problem and never shows a value.
+- The Convex tool owns some names, and the CLI never writes them to a Convex deployment: `CONVEX_DEPLOYMENT`, `CONVEX_DEPLOY_KEY`, `CONVEX_DEPLOYMENT_TOKEN`, `CONVEX_SELF_HOSTED_URL`, `CONVEX_SELF_HOSTED_ADMIN_KEY`, `CONVEX_CLOUD_URL`, `CONVEX_URL`, `CONVEX_SITE_URL`, and the client URL names (`NEXT_PUBLIC_CONVEX_URL`, `VITE_CONVEX_URL`, `PUBLIC_CONVEX_URL`, `REACT_APP_CONVEX_URL`, `EXPO_PUBLIC_CONVEX_URL`, and the same `…_CONVEX_SITE_URL` names). An entry with one of these names cannot have the target `convex`. Another target (for example `NEXT_PUBLIC_CONVEX_URL` to `vercel`) is valid.
+- A platform target and its table are operator decisions ([[dev-knw-nsec-rules]] § Rule 8). The delivery is in [[dev-sk-nsec-plan_push]].
 
 ## The local mapping: `secrets.local.toml`
 
@@ -110,6 +134,8 @@ A literal (`value = "…"`) is committed in plaintext. Use a literal only when b
 2. The value is the same in all environments.
 
 A literal has no environment. `--env prod` gives the same literal as `--env dev`. A value that is different in each environment goes in the store, also when it is not secret.
+
+A literal of `secrets.toml` is public. `secrets push` does not check literals against the ids of a platform, but it checks each store value of any length ([[dev-knw-nsec-cli]] § Known limits, item 10). Thus a short value that is not secret and is the same in all environments is better as a literal. The operator decides. Never move a secret value into `secrets.toml`.
 
 `secrets bind` refuses a literal that looks like a secret, and `secrets doctor` gives `fail` for it. The check looks for a known key prefix (for example `sk_live_`), a key block, a JWT, a URL with a password, a high-entropy string of 24 or more characters, and a random token of 16 to 23 letters and digits. A UUID and a 40-character lowercase hex string pass, except when a word of the variable name says secret (for example `TOKEN` in `POSTMARK_API_TOKEN`). The check does not find all secrets ([[dev-knw-nsec-cli]] § Known limits, item 2). You decide first: when a value can be secret, it is not a literal.
 

@@ -51,7 +51,9 @@ Map the environment variables of one app to secret names and literals in a commi
    ```
    - Use `--optional` only when the app works without the variable. When the store has no value for an optional name, `secret` does not set the variable and also removes a shell variable of that name (unless `--keep-env`).
    - Use `--value` only for a literal that is not secret. Never give a value to `--value`. The secret check of `bind` is not complete ([[dev-knw-nsec-cli]] § Known limits, item 2).
-   - Use `--to local` unless the task names a platform target. A platform target needs a `[targets.<target>]` table in `secrets.toml`. Add that table only when the operator or the task gives its content. `bind` refuses a target without its table.
+   - Use `--to local` unless the task names a platform target. A platform target needs a `[targets.<target>]` table in `secrets.toml` with its fields ([[dev-knw-nsec-model]] § The target tables). Add that table only when the operator or the task gives its content. `bind` refuses a target without its table. A table that is not valid stops every command of the project, also `secret <cmd>`: run `secrets doctor` after each change of a table.
+   - Do not give the target `convex` to a name that the Convex tool owns (for example `CONVEX_DEPLOYMENT` or `NEXT_PUBLIC_CONVEX_URL`): the mapping is then not valid.
+   - The delivery to a platform is in [[dev-sk-nsec-plan_push]]. Only the operator runs `secrets push`.
    - stdout says `added`, `replaced`, or `unchanged` for each entry.
    - To remove an entry, delete its line in `[env]` by hand. No command removes an entry. The file holds no values.
 8. **Cover the ignored files.** The `.gitignore` of the project (or of the repository) must cover `.env*` and `secrets.local.toml`. Add the missing lines:

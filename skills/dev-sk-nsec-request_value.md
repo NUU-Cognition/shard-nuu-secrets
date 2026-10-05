@@ -27,6 +27,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
 2. **Remove what is not necessary.**
    - `preview` reads the dev value when it has no own value. Request a preview value only when it must be different from dev.
    - Request `prod` or `deploy` values only when the task needs them.
+   - A platform credential is in the environment `deploy`: `vercel/token`, `vercel/team-id`, `convex/<deployment>/<env>` (a typed deploy key), or `railway/token`. Use the table of [[dev-sk-nsec-plan_push]] (step 7).
    - Request each secret name one time for each environment, also when two variables use it.
 3. **Write the request for a value.** Use this shape. Put one command for each value:
 

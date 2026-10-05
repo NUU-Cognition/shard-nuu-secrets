@@ -60,6 +60,7 @@ An app can show a value in its output: debug output, a configuration dump, or an
 - Do not copy a value into a test fixture, a configuration file, a script, or a temporary file.
 - Do not open or show the content of a `.env*` file. This also applies to an example file such as `.env.example`, also when Git tracks it. Any of these files can hold a value, and a file can be a symbolic link to another file. `secrets doctor` names the managed variables in the `.env*` files, and it shows names only. Get the variable names of an app from its source code ([[dev-sk-nsec-setup_project]], step 4).
 - If a tool can read its configuration only from a file, stop. Tell the operator the tool and the file. The operator decides.
+- Never run `vercel env pull`. It writes the values of a Vercel environment to a file.
 
 ## Rule 3 — Never pass a value as a process argument
 
@@ -93,8 +94,11 @@ The operator enters values and manages keys. Do not run these commands. The one 
 | `secrets store fix-config` | Writes the generated `.sops.yaml` and `.gitleaks.toml` again: one commit and one push. |
 | `secrets store remove` | Removes a store clone and its entry in `stores.toml` (local state). The operator runs it from a folder outside the clone. |
 | `secrets login`, `secrets logout` | Change the NUU account of the operator. |
+| `secrets push` (every environment: `dev`, `preview`, `prod`) | Sends values to a platform (Vercel, Convex, Railway). It can remove variables, and on Convex the change takes effect at once. See Rule 9. |
 
 "The operator asks" means: the operator (or your dispatcher, for the operator) names this command for this action in this session. A general task, for example "set up the secrets of the app", does not give this permission.
+
+This exception never covers `--yes` on a push to production, unless the operator gives that exact command with `--yes`.
 
 For `secrets set` and `secrets edit`, the operator types the values in their own terminal. Give the operator the command. Do not run it: you would have to type the value. Use [[dev-sk-nsec-request_value]].
 
@@ -113,6 +117,7 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 | `secrets store sync <name>` | Refresh one store clone that a plain `secrets doctor` checked first. Always name the store. |
 | `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secret` without `--offline` clones the store when necessary. |
 | `secrets init-project`, `secrets bind` | Write `secrets.toml`: names and targets, no values. See [[dev-sk-nsec-setup_project]]. |
+| `secrets plan <target> --env <env>` | Show what `secrets push` sends to a platform: names and statuses only. It calls no platform. See Rule 9 and [[dev-sk-nsec-plan_push]]. |
 | `secrets export` | Only under the conditions below. |
 | `--help`, `--version` | Show the help or the version. |
 
@@ -124,7 +129,7 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 - Use `secrets export` only when a tool must read the values from stdin. Pipe the output directly into that tool, in the same command. That tool must not print what it reads.
 - Never run `secrets export` without a pipe. Never pipe it into a program that shows its input, for example `cat`, `less`, `head`, `jq`, or `tee`.
 - Do not use `eval "$(secrets export --format shell)"`. The values then stay in your shell. Use `secret <cmd>`.
-- Do not use `secrets export --to vercel`, `--to convex`, or `--to railway` to send values to a platform. Each push of values to a platform needs the approval of the operator for that push.
+- Do not use `secrets export --to vercel`, `--to convex`, or `--to railway` to send values to a platform. Only the operator sends values to a platform, with `secrets push` (Rule 9).
 
 ## Rule 7 — Ask the operator for values and keys
 
@@ -132,7 +137,22 @@ When a value or a key is missing, ask the operator. Give the variable, the secre
 
 ## Rule 8 — Platform targets need the operator
 
-A platform target (`vercel`, `convex`, `railway`) in `secrets.toml` sends values to a platform in a later version of the CLI. Do not add a `[targets.<target>]` table, and do not add a platform target to the `to` list of an entry, unless the operator or the task names that target.
+A platform target (`vercel`, `convex`, `railway`) in `secrets.toml` tells `secrets push` what to send to a platform. Do not add a `[targets.<target>]` table, and do not add a platform target to the `to` list of an entry, unless the operator or the task names that target.
+
+## Rule 9 — Delivery to a platform
+
+`secrets plan` shows what a push sends. `secrets push` sends it. A push sends values out of this machine, so only the operator runs it.
+
+- **`secrets push` is an operator command for every environment** (`dev`, `preview`, `prod`). Do not run it. Give the operator the exact `plan` and `push` commands ([[dev-sk-nsec-plan_push]]).
+- **Never add `--yes`.** `--yes` is the approval of the operator for a push to production. The exception of Rule 5 never covers `--yes`, unless the operator gives that exact command with `--yes`.
+- **`secrets plan` is an agent command.** It prints names and statuses, never a value, and it calls no platform. But it decrypts the store values and the platform credentials in memory: it needs a key in group `deploy`. Before a plan, follow the refresh rule of Rule 6: when interrupted local work can matter, run plain `secrets doctor` with the same options first, or use `secrets plan --offline`.
+- **`no access` is expected** for a key that is not in group `deploy`. It is not a permission to add access. Do not ask for group `deploy` unless the operator or the task says so.
+- **A plan is not proof of a push.** `plan` cannot see the state of the platform: the Vercel variables of other environments, the Railway reference variables, or an identifier collision. A successful plan does not prove that the push passes.
+- **Credentials.** Never write a platform credential. Give the operator the exact command: `secrets set vercel/token --env deploy`, `secrets set vercel/team-id --env deploy`, `secrets set convex/<deployment>/<env> --env deploy`, or `secrets set railway/token --env deploy`.
+- **After an `uncertain` write, never run the push again.** Show the operator the confirmed writes and the uncertain writes from stderr. The CLI says: `Check each uncertain variable on the platform before you run the push again.`
+- **A short store value inside a platform id.** A push stops when an id from the platform holds a store value or a credential, of any length. The operator decides. A value that is not secret can become a literal in `secrets.toml`. Never move a secret value into `secrets.toml`.
+- **No deployment.** Do not deploy after a push, and do not run a platform CLI with a value. Give the operator the `next` lines of the push output.
+- **Fixed error texts.** A push shows only fixed error texts and the HTTP status. Do not try to get the message of the platform from another source.
 
 ## Tests of the CLI itself
 
