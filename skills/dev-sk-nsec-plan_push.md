@@ -28,7 +28,7 @@ Prepare the delivery of the variables of one environment to a platform. You run 
    ```sh
    secrets plan <target> --env <env>
    ```
-   - Add `--json` when you need one JSON value. It has the same facts and no values.
+   - Add `--json` to include all error texts. It prints one JSON object and no values.
    - Never use `--env deploy`: the CLI refuses it.
 5. **Read the plan.**
    - `target …`: check the project and the platform environment (Vercel `dev → development`, `preview → preview`, `prod → production`; Railway from the `environments` table).
@@ -39,8 +39,8 @@ Prepare the delivery of the variables of one environment to a platform. You run 
      | `ok` | Nothing. |
      | `not set` (optional credential, for example `vercel/team-id`) | Nothing. Without a team id, the requests go to the personal account of the token. |
      | `missing`, `empty` | Request the credential from the operator (step 7). |
-     | `not valid` | Give the operator the error line. For example: a Convex key of the wrong type (`prod:` is only for `prod`; `dev:` is for `dev` and `preview`), a Convex key with no type, or a team id that is not `team_…`. Never move a key from one name to another. |
-     | `no access` | Expected for a key that is not in group `deploy`. Report it. It is not a permission to add access, and you do not ask for group `deploy` unless the operator or the task says so. |
+     | `not valid` | Run `secrets plan <target> --env <env> --offline --json` with the same mapping and store options. Give the operator the matching text from `errors`. For example: a Convex key of the wrong type (`prod:` is only for `prod`; `dev:` is for `dev` and `preview`), a Convex key with no type, or a team id that is not `team_…`. Never move a key from one name to another. |
+     | `no access` | The CLI cannot read `deploy.enc.yaml`: the reason can be absent deploy membership or a decrypt error. Report the fixed reason. Do not infer membership from this status alone. It is not a permission to add access, and you do not ask for group `deploy` unless the operator or the task says so. |
 
    - `set <VAR> ← <name>` or `← literal`: the push sends this variable. `remove <VAR> ← <name> (empty, optional)`: the push removes the variable from the platform. On Railway, a removal has the note `Railway can start a deployment for a removal`.
    - `error …` lines:

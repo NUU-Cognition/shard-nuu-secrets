@@ -67,7 +67,7 @@ Shows what `secrets push` sends to a platform: the names and their sources, neve
 |---|---|
 | `<target>` | `vercel`, `convex`, or `railway`. The mapping needs the `[targets.<target>]` table. |
 | `--env <env>` | Required. `dev`, `preview`, or `prod`. `--env deploy` is refused: `deploy.enc.yaml` holds the credentials. |
-| `--json` | One JSON value with the same facts (no values). |
+| `--json` | One JSON object with names, statuses, and all error texts. It contains no values. |
 | `--offline` | Use the cached store clone. No network call, and no clone when there is none. |
 | `--mapping <path>`, `--project <name>`, `--store <name>` | As for `secrets run`. |
 
@@ -94,6 +94,7 @@ remove   OPT_SECRET  ← app/none (empty, optional)
 - The status of a credential (`key` line) is `ok`, `missing`, `empty`, `not valid`, `no access`, or `not set` (an optional credential with no value).
 - An `error` line: a required `ref` with no value or with an empty value, an empty literal, no access to `deploy.enc.yaml`, or a Railway environment with no entry (`targets.railway.environments has no entry for env <env>: …`). A credential that is `missing`, `empty`, `not valid`, or `no access` is also an error.
 - The last line counts the variables and the errors.
+- Text output shows the credential status. It omits the detailed credential error for `missing`, `empty`, and `not valid`. Use `--json` for that error text.
 
 The credentials (in `deploy.enc.yaml`, environment `deploy`, group `deploy`):
 
@@ -238,6 +239,9 @@ Sends the mapped variables of one environment to a platform. It is an operator c
   - `skipped <VAR> (reference variable)`: a Railway reference variable; this is not a failure, but the store value is not on the platform;
   - `failed <VAR> (<reason>)`: the platform refused the write, or the push did not send it;
   - `uncertain <VAR> (<reason>; the platform can have the change)`: the request was sent, but the answer did not confirm it.
+
+  A Vercel answer with an unexpected type or an invalid failure list is `uncertain`. A Railway mutation with GraphQL errors is also `uncertain`, except for a confirmed rejection. A confirmed rejection requires no mutation result. Every error must have one of these codes: `GRAPHQL_PARSE_FAILED`, `GRAPHQL_VALIDATION_FAILED`, or `BAD_USER_INPUT`. An error beside a mutation result is `uncertain`.
+
 - After the first failed or uncertain write, the push sends nothing more. The exit status is 0 only when each write is confirmed. stderr names the confirmed writes (`secrets: confirmed writes: …`) and the uncertain writes (`secrets: uncertain writes: …: the platform can have the change.`). With an uncertain write, stderr says `secrets: Check each uncertain variable on the platform before you run the push again.`
 - An error shows a fixed text and the HTTP status, for example `an error that the CLI does not know (HTTP <status>)`. The CLI never shows a message, a code, a request id, the body, or a header of an answer.
 - An identifier from an answer (a Vercel variable id, a Railway project, service, or environment id, the Convex deployment URL) must hold no credential and no store value of the push, of any length. Else the push stops before that request: `… from the platform holds the credential <name>`, or `… from the platform holds the value of <VAR> (a value that is not secret can be a literal in secrets.toml)`. A literal of `secrets.toml` is public, so it is not checked.
@@ -289,7 +293,7 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 | `✘ <path> is not valid:` with `- targets.<target>: …` or `- env.<VAR>.to: "convex" is not allowed: the Convex tool owns <VAR>, …` | A `[targets.*]` table or a Convex target is not valid. Every command of the project stops, also `secret <cmd>`, `run`, and `export`. | Run `secrets doctor`. Fix the table only when the operator or the task gives its content (Rule 8). Else report it. |
 | `✘ <path> has no [targets.<target>] table.` | `plan` or `push` for a target with no table. | Report it. Do not add the table on your own (Rule 8). |
 | `✘ --env deploy: plan and push deliver dev, preview, prod.` | `deploy.enc.yaml` holds the credentials and is never delivered. | Use `dev`, `preview`, or `prod`. |
-| `error    this machine cannot open deploy.enc.yaml: …` (a `plan` line) | The key of this machine is not in group `deploy`. The credentials show `no access`. | Expected for such a key. It is not a permission to add access. Report it. |
+| `error    this machine cannot open deploy.enc.yaml: …` (a `plan` line) | The CLI cannot read `deploy.enc.yaml`. The reason can be absent deploy membership or a decrypt error. The credentials show `no access`. | Report the fixed reason. Do not infer membership from this status alone. It is not permission to add access. |
 | `✘ secrets push <target> --env prod changes production. Each push to production needs the approval of the operator. Nothing was read or sent.` | `push --env prod` with no `--yes` (exit 2). | Agents do not run `push`. Give the operator the `plan` and `push` commands ([[dev-sk-nsec-plan_push]]). |
 | `✘ secrets push <target> --env <env>: the plan has <n> error(s). Nothing was sent.` | The plan has errors (exit 1). | Run `secrets plan <target> --env <env>` and act on each error. |
 | `secrets: Check each uncertain variable on the platform before you run the push again.` | A push has uncertain writes (exit 1). | Never run the push again. Show the confirmed and the uncertain writes to the operator. |
