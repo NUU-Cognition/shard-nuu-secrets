@@ -158,7 +158,7 @@ A platform target (`vercel`, `convex`, `railway`) in `secrets.toml` tells `secre
 
 ## Rule 10 — The secret scan of store commits
 
-Before each store commit, the CLI scans the exact bytes of the change with gitleaks. Each store write makes such a commit, and each store write is an operator command (Rule 5). You run a store write only when the operator gives you that exact command. You also read the output of a store write that the operator sends you. The facts and the messages of the scan are in [[dev-knw-nsec-cli]] § The secret scan of store commits.
+Before a store commit, the CLI scans the exact bytes of the change unless gitleaks is missing or `SECRETS_GITLEAKS=0`. A store write that changes the store makes a commit. A write with no change makes no commit and runs no scan. Each store write is an operator command (Rule 5). You run a store write only when the operator gives you that exact command. You also read the output of a store write that the operator sends you. The facts and the messages of the scan are in [[dev-knw-nsec-cli]] § The secret scan of store commits.
 
 - **Never turn the scan off.** Never set `SECRETS_GITLEAKS=0`: not exported, not in a shell profile, not as a prefix of a command, and not in a script. Never remove, rename, or hide gitleaks on `PATH` to pass a write. Only the operator decides that a finding is a false positive. Only the operator runs one command with the prefix `SECRETS_GITLEAKS=0`.
 - **Check for an inherited switch before a write.** Before you run a store write that this shard allows (an exact write command that the operator gives you, or a write in a sandbox test), check the environment of that command for `SECRETS_GITLEAKS=0`. Use the same shell as the write. Use one of these checks:

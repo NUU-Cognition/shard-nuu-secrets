@@ -44,13 +44,13 @@ Ask the operator to write a missing value, or to make or add a key. The operator
      secrets set <name> --env <env>
 
    Do not send me the values. Tell me when each command reports "set" or "unchanged".
-   If a command stops with a ✘ message, or prints a line that starts with "secrets:", send me that text. It has no value.
+   If the command stops or warns, report its exit status. Copy the fixed write-error text, safe rule labels, safe file labels, and cleanup warnings. Do not copy file content or raw tool output. Older commands can show user-selected paths. Do not send a line if a path or another field contains a value. Instead, tell me which kind of error occurred.
    ```
 
    - Outside the project folder, the operator adds `--store <local store name>` or `--mapping <path>` to the command.
    - A successful `secrets set` prints `set  <name>  env <env>  store <store> @ <revision>`, or `unchanged  …` when the store already has that value. Both exit 0. Neither shows a value.
    - Before the commit, `secrets set` runs the secret scan. It can stop with `✘ The secret scan (gitleaks) …`, or print the warning `secrets: gitleaks is not on PATH, …`. Read the text that the operator sends with [[dev-sk-nsec-diagnose]] (step 9).
-   - When plain `secrets doctor` shows `SECRETS_GITLEAKS=0: the CLI does not scan store commits` or `gitleaks is not on PATH: the CLI does not scan store commits`, add that line to the request. Then the write of the operator has no secret scan ([[dev-knw-nsec-rules]] § Rule 10).
+   - When plain `secrets doctor` shows `SECRETS_GITLEAKS=0: the CLI does not scan store commits` or `gitleaks is not on PATH: the CLI does not scan store commits`, add that line to the request. Ask the operator to check the command environment in their terminal. If the reported condition also applies there, the write has no secret scan ([[dev-knw-nsec-rules]] § Rule 10).
 4. **Write the request for a key.** Use this shape when `secret` stops with `✘ No usable age key: …`, or when `secrets doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`. Do not use it for `this machine as a recipient: unknown (…)`: that line is not proof of a missing key (see [[dev-sk-nsec-diagnose]]). First collect the public facts yourself:
    - When doctor reports a missing key file and no other key source, use step 1a of the request.
    - When the file exists but cannot be used, use step 1c. Do not ask the operator to replace it with `secrets keygen`.

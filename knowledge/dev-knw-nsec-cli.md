@@ -201,13 +201,13 @@ Do not run these commands. The one exception is in [[dev-knw-nsec-rules]] § Rul
 | `secrets keygen` | none, `--out <file>`, or `--public --file <path>` | Makes the age key of this machine, or (with `--out`) a recovery key file. It refuses to replace an existing key file. `--public --file <path>` prints the public key of another key file. |
 | `secrets recipient add <id> <age-public-key>` | `--groups <groups>` (required: `dev`, `prod`, `deploy`), `--store`, `--mapping` | Adds a recipient to groups. |
 | `secrets recipient rm <id>` | `--rotate`, `--store`, `--mapping` | Removes a recipient and makes new data keys. |
-| `secrets store init <url>` | `--recovery <age-public-key>` (required), `--name`, `--id`, `--key` | Creates a store in an empty Git repository. Its first commit has `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, and `.gitignore`. The secret scan also runs on this commit. |
+| `secrets store init <url>` | `--recovery <age-public-key>` (required), `--name`, `--id`, `--key` | Creates a store in an empty Git repository. Its first commit has `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, and `.gitignore`. The same scan rules apply to this first commit. |
 | `secrets store fix-config` | `--store`, `--mapping` | Writes the generated `.sops.yaml` (from `recipients.toml`) and `.gitleaks.toml` when one is missing or changed: one commit and one push. stdout: `fixed  <file> of store <name> @ <revision>` for each file, or `unchanged  …`. It refuses a store file that is a symbolic link: the operator first removes the link in a checkout of the store (`git rm`, commit, push). |
 | `secrets store remove <name>` | none | Removes the clone folder of a store and its entry in `stores.toml` (local state). See below. |
 | `secrets login`, `secrets logout` | `login --verbose` | The optional NUU account. |
 | `secrets push <target> --env <env>` | `--yes` (required for `--env prod`), `--mapping`, `--project`, `--store` | Sends the mapped variables of one environment to a platform. Every environment is an operator push. See below. |
 
-A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks the clone and applies the change to the newest remote state. When the store changes, the CLI scans the bytes of the change with gitleaks, commits exactly those bytes, and pushes the commit ([The secret scan of store commits](#the-secret-scan-of-store-commits)). It reports success only after the remote accepts the push. When nothing changes (for example `unchanged`), it makes no commit and runs no scan.
+A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks the clone and applies the change to the newest remote state. When the store changes, the CLI applies the scan rules below. It commits the exact bytes that it read and pushes the commit ([The secret scan of store commits](#the-secret-scan-of-store-commits)). It reports success only after the remote accepts the push. When nothing changes (for example `unchanged`), it makes no commit and runs no scan.
 
 ### `secrets store remove <name>` (operator)
 
@@ -262,7 +262,7 @@ After the push, the effect on each platform:
 
 ## The secret scan of store commits
 
-The CLI makes each store commit itself: `secrets store init` and each write that changes the store (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`). Before the commit, it scans the exact bytes of the change with gitleaks. These commands are operator commands. The agent rules are in [[dev-knw-nsec-rules]] § Rule 10.
+The CLI makes each store commit itself: `secrets store init` and each write that changes the store (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`). Before the commit, it scans the exact bytes of the change unless gitleaks is missing or `SECRETS_GITLEAKS=0`. These commands are operator commands. The agent rules are in [[dev-knw-nsec-rules]] § Rule 10.
 
 How the scan works:
 

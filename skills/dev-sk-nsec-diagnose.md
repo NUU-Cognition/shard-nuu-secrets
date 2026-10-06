@@ -18,7 +18,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
 
 # Actions
 
-1. **Read the rules.** You read [[dev-knw-nsec-rules]]. Never run `sops`, never open the key file, and never open a store file to diagnose.
+1. **Read the rules.** You read [[dev-knw-nsec-rules]]. Never run `sops`, never open the key file, and never open a store file to diagnose. If the input is a refused store write, a cleanup warning, or a `Nothing was pushed.` message, skip steps 2–8. Follow step 9, then step 10. Use plain `secrets doctor` with the same store, mapping, and environment options. Do not run `store sync`, `doctor --online`, or another command that refreshes this clone before the operator approves the repair.
 2. **Read the cached state first, then refresh.** Run plain `secrets doctor` with the mapping, store, and environment options for this task. Keep its lines about unpushed commits, changed files, and links. Use `secrets store list` to match the mapping URL to its local store name. When the network is available, refresh only that store:
    ```sh
    secrets store sync <local store name>

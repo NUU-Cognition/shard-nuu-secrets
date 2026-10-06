@@ -29,7 +29,7 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 - Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, and each `*.enc.yaml`. The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once.
 - The store clone is a cache that the CLI owns. A refresh (`secret`, `export`, `plan` without `--offline`, `push`, `store sync`, `doctor --online`) fetches it and resets it to the remote.
 - A write that changes the store makes one Git commit and one push. A write with no change makes no commit. The operator does the writes, also `store fix-config` and `store remove` (see [[dev-knw-nsec-rules]] § Rule 5).
-- Before each store commit, the CLI scans the exact bytes of the change with gitleaks. No Git hook runs in the store clone. The scan does not cover a manual commit in another checkout, so the team changes the store only through `secrets`. See [[dev-knw-nsec-cli]] § The secret scan of store commits and [[dev-knw-nsec-rules]] § Rule 10.
+- Before a store commit, the CLI scans the exact bytes of the change unless gitleaks is missing or `SECRETS_GITLEAKS=0`. No Git hook runs in the store clone. The scan does not cover a manual commit in another checkout, so the team changes the store only through `secrets`. See [[dev-knw-nsec-cli]] § The secret scan of store commits and [[dev-knw-nsec-rules]] § Rule 10.
 
 You never open these files. The CLI reads them for you. See [[dev-knw-nsec-rules]] § Rule 4.
 

@@ -18,7 +18,7 @@ NUU Secrets keeps the secrets of a team in one encrypted Git store and gives the
 - **`secret <cmd>`.** It reads the store, decrypts in memory, and starts `<cmd>` with the values in its process environment. It writes no file with a plaintext value. A refresh or a first clone changes the Git files and the index of the store clone.
 - **Delivery to a platform.** `secrets plan <target> --env <env>` shows what a push sends to Vercel, Convex, or Railway: names and statuses only. `secrets push` sends the values. Only the operator runs `push`.
 - **The operator.** Only the operator enters values (`secrets set`), manages keys, and pushes to a platform (`secrets push`). You ask the operator for them.
-- **The secret scan.** Before each store commit, the CLI scans the exact bytes of the change with gitleaks. A finding or a failed scan stops the write. Only the operator decides that a finding is a false positive.
+- **The secret scan.** Before a store commit, the CLI scans the exact bytes of the change unless gitleaks is missing or `SECRETS_GITLEAKS=0`. A finding or a failed scan stops the write. Only the operator decides that a finding is a false positive.
 - **No account.** A NUU account is optional. No command needs a login. NUU hosts no secrets.
 
 The full model is in [[dev-knw-nsec-model]]. The command reference, the exit statuses, and the known limits are in [[dev-knw-nsec-cli]].
