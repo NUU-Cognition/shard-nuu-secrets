@@ -1,5 +1,5 @@
 ---
-description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; the operator-only commands; how to ask for a value; what to do after a leak"
+description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; the operator-only commands; how to ask for a value; the secret scan of store commits; what to do after a leak"
 ---
 
 # Knowledge: Agent Rules
@@ -19,6 +19,8 @@ This shard uses one word for one thing.
 | store | The Git repository of the team that holds the encrypted values (SOPS + age). |
 | store clone | The copy of the store on this machine, at `<secrets home>/stores/<store name>/`. The CLI owns it as a cache. |
 | key file | The age private key of this machine: `$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`. |
+| store write | A command that changes the store with one Git commit and one push: `secrets store init`, `set`, `unset`, `edit`, `recipient add|rm`, and `store fix-config`. Each store write is an operator command (Rule 5). |
+| secret scan | The gitleaks scan that the CLI runs on the bytes of each store commit before the commit (Rule 10). |
 | operator | The person who owns this machine and its store access. Only the operator enters values and manages keys. |
 
 ## Why the rules exist
@@ -154,11 +156,36 @@ A platform target (`vercel`, `convex`, `railway`) in `secrets.toml` tells `secre
 - **No deployment.** Do not deploy after a push, and do not run a platform CLI with a value. Give the operator the `next` lines of the push output.
 - **Fixed error texts.** A push shows only fixed error texts and the HTTP status. Do not try to get the message of the platform from another source.
 
+## Rule 10 — The secret scan of store commits
+
+Before each store commit, the CLI scans the exact bytes of the change with gitleaks. Each store write makes such a commit, and each store write is an operator command (Rule 5). You run a store write only when the operator gives you that exact command. You also read the output of a store write that the operator sends you. The facts and the messages of the scan are in [[dev-knw-nsec-cli]] § The secret scan of store commits.
+
+- **Never turn the scan off.** Never set `SECRETS_GITLEAKS=0`: not exported, not in a shell profile, not as a prefix of a command, and not in a script. Never remove, rename, or hide gitleaks on `PATH` to pass a write. Only the operator decides that a finding is a false positive. Only the operator runs one command with the prefix `SECRETS_GITLEAKS=0`.
+- **Check for an inherited switch before a write.** Before you run a store write that this shard allows (an exact write command that the operator gives you, or a write in a sandbox test), check the environment of that command for `SECRETS_GITLEAKS=0`. Use the same shell as the write. Use one of these checks:
+  ```sh
+  test "${SECRETS_GITLEAKS-}" = 0 && echo "SECRETS_GITLEAKS=0 is set"
+  secrets doctor     # the Tools line: SECRETS_GITLEAKS=0: the CLI does not scan store commits
+  ```
+  If the switch is set, do not continue silently. Do not run the write. Report it to the operator, and ask the operator to unset it.
+- **`SECRET_SCAN_FOUND`.** Stop and report `SECRET_SCAN_FOUND`. Report only the safe count, rule labels, and file labels from the CLI. Preserve any cleanup warning. Do not open the matching line. Do not bypass or repeatedly retry the finding. A finding in an encrypted file can indicate plaintext metadata, modified tooling, or a false positive. Run `secrets doctor` and report the result. Only the operator decides whether a finding is a false positive.
+  - The message starts with `✘ The secret scan (gitleaks) found <n> possible secret(s) in the change to store <store>.` The text output does not print the code.
+  - The message has the hint ``Use `SECRETS_GITLEAKS=0` only as a prefix for one command after you confirm a false positive.`` This hint is for the operator. You never use it.
+- **`SECRET_SCAN_FAILED`.** Run `secrets doctor` and report the fixed failure reason. Preserve any cleanup warning. Do not bypass a failed scan.
+  - The message starts with `✘ The secret scan (gitleaks) of the change to store <store> did not complete: <reason>.`
+- **Cleanup.** A scan refusal before staging writes no new Git object. Preserve any cleanup warning. A later failure can leave local objects. Do not assume that a reset removed them.
+  - A message with `Nothing was pushed.` and the repair ``Run `secrets store remove <name>`, then `secrets store clone <url>`.``: report it to the operator. Run the repair only when the operator approves it. `store remove` is an operator command (Rule 5).
+  - A cleanup line can name a folder that holds copies of the scanned bytes (`The CLI could not delete its private scan folder <folder>. Delete it.`). Do not open the files in that folder. Report the line to the operator. The operator deletes the folder.
+- **No gitleaks on `PATH`.** The warning is `secrets: gitleaks is not on PATH, so the secret scan of the store commit did not run. …`. The scan did not run. Check the command's exit status. If the command succeeded, the write was made without a scan. Report both facts. Ask the operator to install gitleaks.
+- **What to copy.** Copy the fixed write-error text, safe rule labels, safe file labels, and cleanup warnings. Do not copy file content or raw tool output. Older commands can show user-selected paths.
+- **Manual commits.** Change the managed store only through `secrets`. The CLI scan does not cover a manual commit in another checkout. Never make a Git commit in a store clone yourself (Rule 4).
+
+In a headless session, a scan refusal and an inherited `SECRETS_GITLEAKS=0` are blockers. See [[dev-hinit-nsec]].
+
 ## Tests of the CLI itself
 
 This shard is for the use of NUU Secrets in projects. A task that tests the `secrets` CLI itself (not an app) needs a sandbox:
 
-- In each command that runs `secrets` or `secret`, set `HOME`, `SECRETS_HOME`, `NUU_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, and `TMPDIR` to temporary folders. Set `SOPS_AGE_KEY_FILE` to a file path in the temporary root folder (for example `<temp root>/home/keys.txt`). Unset `SOPS_AGE_KEY` and `SOPS_AGE_KEY_CMD`: SOPS can use them, and the SOPS default key file under `XDG_CONFIG_HOME`, as other key sources.
+- In each command that runs `secrets` or `secret`, set `HOME`, `SECRETS_HOME`, `NUU_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, and `TMPDIR` to temporary folders. Set `SOPS_AGE_KEY_FILE` to a file path in the temporary root folder (for example `<temp root>/home/keys.txt`). Unset `SOPS_AGE_KEY` and `SOPS_AGE_KEY_CMD`: SOPS can use them, and the SOPS default key file under `XDG_CONFIG_HOME`, as other key sources. Unset `SECRETS_GITLEAKS`: an inherited `SECRETS_GITLEAKS=0` turns off the secret scan of the test store (Rule 10).
 - Use test keys (`age-keygen`), a local bare Git repository as the store remote, and made-up test values.
 - Never read or change the real key file or the real store clones.
 - Delete the temporary folders at the end.

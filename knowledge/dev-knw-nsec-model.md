@@ -14,7 +14,7 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 |---|---|---|
 | `recipients.toml` | The recipients (age public keys) and their groups. Plaintext. | — |
 | `.sops.yaml` | The SOPS policy. The CLI makes it from `recipients.toml`. | — |
-| `.gitleaks.toml` | The gitleaks configuration. The CLI makes it. It keeps the default rules of gitleaks and allows only the age public keys in `recipients.toml`. A token in another file, and another token in `recipients.toml`, is still a finding. | — |
+| `.gitleaks.toml` | The gitleaks configuration. The CLI makes it. It keeps the default rules of gitleaks and allows only the age public keys in `recipients.toml`. A token in another file, and another token in `recipients.toml`, is still a finding. The secret scan of the CLI does not read this file: it has its own fixed config. | — |
 | `README.md`, `.gitignore` | Plain files of the store. | — |
 | `dev.enc.yaml` | The development values. | `dev` |
 | `preview.enc.yaml` | The preview values that are different from dev. | `dev` |
@@ -29,6 +29,7 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 - Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, and each `*.enc.yaml`. The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once.
 - The store clone is a cache that the CLI owns. A refresh (`secret`, `export`, `plan` without `--offline`, `push`, `store sync`, `doctor --online`) fetches it and resets it to the remote.
 - A write that changes the store makes one Git commit and one push. A write with no change makes no commit. The operator does the writes, also `store fix-config` and `store remove` (see [[dev-knw-nsec-rules]] § Rule 5).
+- Before each store commit, the CLI scans the exact bytes of the change with gitleaks. No Git hook runs in the store clone. The scan does not cover a manual commit in another checkout, so the team changes the store only through `secrets`. See [[dev-knw-nsec-cli]] § The secret scan of store commits and [[dev-knw-nsec-rules]] § Rule 10.
 
 You never open these files. The CLI reads them for you. See [[dev-knw-nsec-rules]] § Rule 4.
 

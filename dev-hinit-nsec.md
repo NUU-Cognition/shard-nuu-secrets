@@ -9,7 +9,7 @@ This is the init of the NUU Secrets shard for a headless Orbh session. The rules
 
 ## What NUU Secrets Is
 
-NUU Secrets keeps the secrets of a team in one encrypted Git store (SOPS + age) and gives them to programs. The CLI is `secrets`. Its alias `secret <cmd>` runs a program with the values in its process environment. It writes no file with a plaintext value (a refresh or a first clone changes the Git files and the index of the store clone). Each project has a committed `secrets.toml` that maps variables to secret names (`secret://clerk/secret-key`) and literals. The environments are `dev`, `preview` (dev with preview values over it), `prod` (never falls back to dev), and `deploy`. Only the operator enters values and manages keys. The model is in [[dev-knw-nsec-model]]. The commands and the known limits are in [[dev-knw-nsec-cli]].
+NUU Secrets keeps the secrets of a team in one encrypted Git store (SOPS + age) and gives them to programs. The CLI is `secrets`. Its alias `secret <cmd>` runs a program with the values in its process environment. It writes no file with a plaintext value (a refresh or a first clone changes the Git files and the index of the store clone). Each project has a committed `secrets.toml` that maps variables to secret names (`secret://clerk/secret-key`) and literals. The environments are `dev`, `preview` (dev with preview values over it), `prod` (never falls back to dev), and `deploy`. Only the operator enters values and manages keys. Before each store commit, the CLI scans the exact bytes of the change with gitleaks. The model is in [[dev-knw-nsec-model]]. The commands and the known limits are in [[dev-knw-nsec-cli]].
 
 ## The Rules in Short
 
@@ -19,7 +19,8 @@ The complete rules are in [[dev-knw-nsec-rules]].
 2. Never write a value to a file. Never pass a value as a process argument.
 3. Never read or copy the key file. Never decrypt or edit a store file. `secrets keygen --public` (with no `--file`) gives you the public key of this machine.
 4. Never run an operator-only command (`secrets set`, `edit`, `unset`, `keygen` except `keygen --public` with no `--file`, `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, `logout`). The one exception: your prompt relays an instruction of the operator that names that exact command. Never add `--yes` to a push.
-5. You are a user. The rules prevent accidents. They are not a security boundary.
+5. Never set `SECRETS_GITLEAKS=0`, and never remove, rename, or hide gitleaks on `PATH`. Before a store write that this shard allows, check for an inherited `SECRETS_GITLEAKS=0`. See [[dev-knw-nsec-rules]] § Rule 10.
+6. You are a user. The rules prevent accidents. They are not a security boundary.
 
 ## What Is Different in a Headless Session
 
@@ -30,9 +31,13 @@ The complete rules are in [[dev-knw-nsec-rules]].
    - `--offline` stops with `… has no cached clone on this machine` and the task forbids network access;
    - a `doctor` item that only the operator can fix ([[dev-sk-nsec-diagnose]]);
    - a tool needs a file with values;
-   - a push to a platform: only the operator runs `secrets push` ([[dev-sk-nsec-plan_push]]).
+   - a push to a platform: only the operator runs `secrets push` ([[dev-sk-nsec-plan_push]]);
+   - a store write stops with the secret scan (`SECRET_SCAN_FOUND` or `SECRET_SCAN_FAILED`), or its message has a cleanup line or `Nothing was pushed.` ([[dev-sk-nsec-diagnose]], step 9);
+   - the environment of a store write that you may run has `SECRETS_GITLEAKS=0` (the `doctor` line `SECRETS_GITLEAKS=0: the CLI does not scan store commits`).
 
-   For a blocker, do not invent a value. Do not use a placeholder that looks real. Do not remove the variable from the mapping to make the run pass. Do not skip the check and report success. Write the request with [[dev-sk-nsec-request_value]], set the `blockers` key, and deliver it as in [Result Delivery](#result-delivery).
+   For a blocker, do not invent a value. Do not use a placeholder that looks real. Do not remove the variable from the mapping to make the run pass. Do not skip the check and report success. Do not turn off the secret scan. Write the request with [[dev-sk-nsec-request_value]] (a value or a key) or with the report of [[dev-sk-nsec-diagnose]] (an operator fix, also a scan refusal), set the `blockers` key, and deliver it as in [Result Delivery](#result-delivery).
+
+   A store write that printed `secrets: gitleaks is not on PATH, …` had no scan. Check its exit status, and report both facts in your result.
 3. **Work that does not need the value goes on.** Finish the parts of the task that do not need the missing value. Then return with the blocker.
 4. **Background programs.** Run a dev server under `secret` in the background of your harness. Stop it before you return. The process of the turn ends with the turn.
 5. **A leak is a blocker of the highest priority.** Stop. Do not repeat the value. Report the variable, the secret name, the environment, and the place of the leak. Say that the session transcript holds the value. Follow [[dev-knw-nsec-rules]] § If a value leaks.

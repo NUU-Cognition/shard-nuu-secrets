@@ -12,7 +12,7 @@ This folder is the remote source of the shard (shorthand `nsec`, package `@nuuco
 - `dev-init-nsec.md` — the interactive init: what NUU Secrets is, the rules in short, and the situations.
 - `dev-hinit-nsec.md` — the headless init for Orbh sessions: the same rules, no interactive prompts, and blockers to the dispatcher or the operator.
 - `knowledge/dev-knw-nsec-rules.md` — the complete agent rules (the required reading).
-- `knowledge/dev-knw-nsec-cli.md` — the commands, the options, the output rules, the exit statuses, the messages, and the known limits.
+- `knowledge/dev-knw-nsec-cli.md` — the commands, the options, the output rules, the exit statuses, the messages, the secret scan of store commits, and the known limits.
 - `knowledge/dev-knw-nsec-model.md` — the store model, secret names, `secrets.toml`, `secrets.local.toml`, literals, and the environment chain.
 - `skills/dev-sk-nsec-run_app.md` — run a program with its secrets.
 - `skills/dev-sk-nsec-setup_project.md` — write the mapping of a project.
@@ -35,4 +35,4 @@ Edit the files of this folder. Then build the shard again:
 flint shard build nuu-secrets
 ```
 
-The command facts come from the `secrets` CLI at canon `10f612f` (`secrets --help` and the README of `NUU-Cognition/secrets`). When the CLI changes, check each command, option, and message of the knowledge files and the skills again.
+The command facts come from the `secrets` CLI at canon `1a8628e` (`secrets --help` and the README of `NUU-Cognition/secrets`). When the CLI changes, check each command, option, and message of the knowledge files and the skills again.

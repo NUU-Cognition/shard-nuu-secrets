@@ -1,10 +1,10 @@
 ---
-description: "The secrets CLI for agents: each command and its options, the output rules, the exit statuses, the messages that agents see, the operator-only commands, and the known limits of the current build"
+description: "The secrets CLI for agents: each command and its options, the output rules, the exit statuses, the messages that agents see, the operator-only commands, the secret scan of store commits, and the known limits of the current build"
 ---
 
 # Knowledge: The `secrets` CLI
 
-The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. `ndv` links both commands. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `10f612f`.
+The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. `ndv` links both commands. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `1a8628e`.
 
 ## Commands for agents
 
@@ -127,6 +127,11 @@ Checks the tools, the key, the stores, the mapping, the project hygiene, and the
 - **Without `--online`**, `doctor` reads the cached clones. It makes no network call and changes nothing. Each store section names the cached revision and its date: `ok  cached revision <revision> (<date>): doctor reads the clone offline, so it can be older than the remote (…)`.
 - **With `--online`**, `doctor` fetches each checked clone and resets it to the remote. The store clone is a cache that the CLI owns: the reset discards the local changes and commits of an interrupted command. `--online` never changes the remote, and it never clones a store that has no clone. The line is `ok  revision <revision> (<date>), refreshed from the remote just now (--online)`. A failed refresh is `fail  --online: cannot refresh the clone: …`, and then the checks of the cached clone follow (`warn  cached revision …: the refresh failed, so the clone can be older than the remote`).
 - `doctor --online` does not show the changes of `recipients.toml`. `secrets store sync <name>` shows them, with the ids, groups, fingerprints, and commit authors.
+- **The gitleaks lines** (section Tools). gitleaks is optional, so these lines are `ok` or `warn`. The line uses the same `PATH` lookup as the secret scan ([The secret scan of store commits](#the-secret-scan-of-store-commits)):
+  - `ok  gitleaks <version>: the CLI scans each store commit with it`. `<version>` can be `(version unknown)`. This line proves only that `gitleaks version` starts. It does not prove that each flag of the scan works. The scan is tested with gitleaks 8.30.1.
+  - `warn  gitleaks is not on PATH: the CLI does not scan store commits`, with the remedy `→ install gitleaks, and the CLI scans each store commit with it: pacman -S gitleaks or brew install gitleaks`.
+  - `warn  gitleaks does not start: a write that needs a commit stops (SECRET_SCAN_FAILED)`. With `SECRETS_GITLEAKS=0`, this line is only `warn  gitleaks does not start`.
+  - With `SECRETS_GITLEAKS=0`, one more line: `warn  SECRETS_GITLEAKS=0: the CLI does not scan store commits`, with the remedy `→ unset SECRETS_GITLEAKS; use SECRETS_GITLEAKS=0 only as a prefix for one command after you confirm a false positive`. This remedy is for the operator ([[dev-knw-nsec-rules]] § Rule 10).
 - Before `secrets doctor --online`, run plain `secrets doctor` with the same mapping, store, and environment options. Before `secrets store sync <name>`, run plain `secrets doctor` that checks the named store. For sync, pass that store name as the argument. Refresh only stores that the plain check covered ([[dev-knw-nsec-rules]] § Rule 6).
 - Steps: [[dev-sk-nsec-diagnose]].
 
@@ -196,13 +201,13 @@ Do not run these commands. The one exception is in [[dev-knw-nsec-rules]] § Rul
 | `secrets keygen` | none, `--out <file>`, or `--public --file <path>` | Makes the age key of this machine, or (with `--out`) a recovery key file. It refuses to replace an existing key file. `--public --file <path>` prints the public key of another key file. |
 | `secrets recipient add <id> <age-public-key>` | `--groups <groups>` (required: `dev`, `prod`, `deploy`), `--store`, `--mapping` | Adds a recipient to groups. |
 | `secrets recipient rm <id>` | `--rotate`, `--store`, `--mapping` | Removes a recipient and makes new data keys. |
-| `secrets store init <url>` | `--recovery <age-public-key>` (required), `--name`, `--id`, `--key` | Creates a store in an empty Git repository. Its first commit has `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, and `.gitignore`. |
+| `secrets store init <url>` | `--recovery <age-public-key>` (required), `--name`, `--id`, `--key` | Creates a store in an empty Git repository. Its first commit has `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, and `.gitignore`. The secret scan also runs on this commit. |
 | `secrets store fix-config` | `--store`, `--mapping` | Writes the generated `.sops.yaml` (from `recipients.toml`) and `.gitleaks.toml` when one is missing or changed: one commit and one push. stdout: `fixed  <file> of store <name> @ <revision>` for each file, or `unchanged  …`. It refuses a store file that is a symbolic link: the operator first removes the link in a checkout of the store (`git rm`, commit, push). |
 | `secrets store remove <name>` | none | Removes the clone folder of a store and its entry in `stores.toml` (local state). See below. |
 | `secrets login`, `secrets logout` | `login --verbose` | The optional NUU account. |
 | `secrets push <target> --env <env>` | `--yes` (required for `--env prod`), `--mapping`, `--project`, `--store` | Sends the mapped variables of one environment to a platform. Every environment is an operator push. See below. |
 
-A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks the clone and applies the change to the newest remote state. When the store changes, it makes one commit and pushes it, and it reports success only after the remote accepts the push. When nothing changes (for example `unchanged`), it makes no commit.
+A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks the clone and applies the change to the newest remote state. When the store changes, the CLI scans the bytes of the change with gitleaks, commits exactly those bytes, and pushes the commit ([The secret scan of store commits](#the-secret-scan-of-store-commits)). It reports success only after the remote accepts the push. When nothing changes (for example `unchanged`), it makes no commit and runs no scan.
 
 ### `secrets store remove <name>` (operator)
 
@@ -255,6 +260,49 @@ After the push, the effect on each platform:
 | `convex` | The deployment reads the new values at once. No deployment is necessary. One request carries all changes; any end other than a complete HTTP 200 makes the whole batch uncertain. |
 | `railway` | Set variables are saved with `skipDeploys` (no deployment). A removal is one request, and `Railway can start a deployment for a removal`. The `next` line asks for a deployment of the service with the new values. |
 
+## The secret scan of store commits
+
+The CLI makes each store commit itself: `secrets store init` and each write that changes the store (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`). Before the commit, it scans the exact bytes of the change with gitleaks. These commands are operator commands. The agent rules are in [[dev-knw-nsec-rules]] § Rule 10.
+
+How the scan works:
+
+- The CLI reads each added or changed file of the clone once. It writes a copy of the bytes to a private temporary folder, with a name that the CLI makes and one last line with a canary (a fake token, random at run time). It runs `gitleaks dir --redact` on the copies with a fixed config of the CLI. The scan does not read the `.gitleaks.toml` of the store, a `.gitleaksignore`, a `gitleaks:allow` comment, or a `GITLEAKS_*` variable. Each copy must give its canary finding, else the scan fails.
+- After a clean scan, the CLI stages exactly these bytes and commits them. Before the push, it checks that `HEAD` is one new commit on the base revision, with exactly the scanned files.
+- **No Git hook runs in the managed clone.** Each Git call of the CLI has `core.hooksPath=/dev/null`. The CLI removes `GIT_CONFIG_PARAMETERS` from each Git call, and the commit has `--no-verify`. Hooks of a local bare remote can run on the remote side of a push.
+- **The switch.** `SECRETS_GITLEAKS=0` (exactly `0`) turns the scan off: no scan and no warning. Any other value keeps the scan on. The store policy check (each value encrypted, the recipients of each file) still runs. Agents never set the switch ([[dev-knw-nsec-rules]] § Rule 10).
+- **"Not on PATH".** No `PATH` entry has an executable `gitleaks` when each entry is resolved as the OS resolves it. An empty or relative entry is resolved against the command folder. An unset `PATH` uses the OS default search path: `/bin:/usr/bin` on glibc Linux, `/usr/bin:/bin` on macOS. There is no exception for any `PATH` form. A `gitleaks` that the CLI finds but that does not start is a failed scan, not a missing tool.
+- **Limits.** A changed file with a NUL byte, a changed file of more than 16 MiB, or more than 32 MiB of changed files together is not scanned: the scan fails. The time limit of one scan is 60 s.
+- **Manual commits.** The scan covers only the commits of the CLI. It does not cover a manual commit in another checkout of the store. Change the managed store only through `secrets`.
+
+Requirements of the scan:
+
+- Linux or macOS. On Windows, a write that needs a commit stops with `SECRET_SCAN_FAILED` when the scan runs.
+- gitleaks 8 (tested with 8.30.1). It is optional: without it, each store write that makes a commit prints one warning and continues.
+- Git with `rev-parse --show-object-format`, `read-tree --empty`, `hash-object --no-filters`, and `update-index -z --index-info` (tested with Git 2.55.0). A Git without one of them stops the write.
+- No `secrets store fix-config` is necessary for this release: the generated `.gitleaks.toml` text did not change.
+
+The messages. The text output does not print the code. Identify the code from the start of the message:
+
+| Code | Message (start) | Meaning |
+|---|---|---|
+| `SECRET_SCAN_FOUND` | `✘ The secret scan (gitleaks) found <n> possible secret(s) in the change to store <store>. Nothing was committed or pushed.` Then one line for each rule and file: `- <rule> in <file label>`, for example `- github-pat in dev.enc.yaml`. Then two hints: `Check each file above. …` and ``Use `SECRETS_GITLEAKS=0` only as a prefix for one command after you confirm a false positive. Do not export it. The store policy check still runs.`` | The scan found a possible secret in the change. The write stops (exit 1). The second hint is for the operator only. |
+| `SECRET_SCAN_FAILED` | `✘ The secret scan (gitleaks) of the change to store <store> did not complete: <reason>. Nothing was committed or pushed.` Then `Next: secrets doctor`. | The scan did not give a clean result. The write stops (exit 1). The reason is a fixed text, for example `gitleaks failed (exit <n>)`, `gitleaks did not start`, `gitleaks did not finish within 60 s`, `the scan did not read each file to its end`, `gitleaks wrote no report`, `the report of gitleaks is not valid`, or `gitleaks wrote an error message, so the scan is not complete`. A failed scan has no finding that an operator can confirm as a false positive. |
+| `SECRET_SCAN_FAILED` or `COMMIT_MISMATCH` (after the commit) | `✘ The secret scan (gitleaks) of the change to store <store> did not complete: <reason>. Nothing was pushed.` or `✘ The commit of store <store> does not hold exactly the changed files: <reason>. Nothing was pushed.` Then `A scan refusal before staging writes no new Git object. A later failure can leave local objects. Do not assume that a reset removed them.` and ``Run `secrets store remove <name>`, then `secrets store clone <url>`.`` | The history or the tree of the new commit is not correct. The CLI found it before the push. Nothing was pushed, but local objects can stay in the clone. The repair is for the operator. |
+| `COMMIT_MISMATCH` (before the scan) | `✘ The clone of store <store> is not at the base revision of this write. Nothing was committed or pushed.` | The clone changed during the write. The hint is `Run the command again.` |
+| `UNSAFE_FILE` | `✘ Store <store> has a changed file that the CLI does not commit: <file label> <problem>. Nothing was committed or pushed.` | A changed file is not a readable regular file with a UTF-8 name and no symbolic link on its path, or it is larger than 256 MiB. |
+| `COMMIT_FAILED`, `WRITE_FAILED` | `✘ The commit of store <store> stopped on a system error (<code>). Nothing was pushed.` or `✘ The write to store <store> stopped on a system error (<code>). Nothing was pushed.` | An unexpected error. The CLI shows at most a system error code such as `EACCES`, never a raw error or a path. `COMMIT_FAILED` also has the line `A scan refusal before staging writes no new Git object. …`. |
+| (a warning) | `secrets: gitleaks is not on PATH, so the secret scan of the store commit did not run. Install gitleaks: pacman -S gitleaks (Arch Linux) or brew install gitleaks (macOS).` | The scan did not run, and the write continues. One warning for each command. |
+
+The file label is a file name of the known store layout (`recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, `dev.enc.yaml`, `preview.enc.yaml`, `prod.enc.yaml`, `deploy.enc.yaml`), or the fixed text `a file outside the known store layout`. A rule id is shown only in the form of a gitleaks rule id, else as a fixed text. The CLI never shows a match, a secret, a line, or the output of gitleaks.
+
+Cleanup lines. The CLI checks each cleanup step. When a step fails, the error keeps its code and gets one more line:
+
+- ``The CLI could not clean the clone of store <name>. Run `secrets store remove <name>`, then `secrets store clone <url>`.``
+- `The CLI could not delete the new clone folder <folder>. Delete it.` (`store init`)
+- `The CLI could not delete its private scan folder <folder>. Delete it.`
+
+A scan refusal before staging writes no new Git object. A later failure can leave local objects. Do not assume that a reset removed them.
+
 ## Output rules
 
 - Normal output never shows a value. The one exception is the stdout of `secrets export`. `secrets push` sends values to a platform and prints names only.
@@ -262,17 +310,18 @@ After the push, the effect on each platform:
 - Diagnostics go to stderr: the `secret:` line, notices that start with `secrets:`, and errors. A CLI error starts with `✘`. It can have remedy lines, but not always. An error of the option parser starts with `error:`, for example `error: unknown option '--bad'` or `error: required option '--format <format>' not specified`.
 - Output names only public facts: variable names, secret names, store names, project names, recipient ids, public keys and key fingerprints, file names, paths, and line numbers.
 - The CLI never shows the content of a store file, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `secrets.toml`, `secrets.local.toml`, `stores.toml`, a `.env` file, or the target of a symbolic link. SOPS and Git errors are a fixed summary. A URL is shown without its user information.
+- The CLI never shows the output of gitleaks. From the report, it shows only rule ids of the gitleaks form and its own file labels ([The secret scan of store commits](#the-secret-scan-of-store-commits)). In the write path, an unexpected error shows at most a system error code, never a raw error or a path. Older commands can show a path that the user selected.
 
 ## Exit statuses
 
 | Status | Meaning |
 |---|---|
 | `0` | Success. |
-| `1` | An error. This includes the errors of the option parser: an unknown option, a missing required option, or an unknown command. `secrets doctor` exits 1 when a check fails. `secrets plan` exits 1 when the plan has an error. `secrets push` exits 1 for a plan error, a failed write, or an uncertain write. |
+| `1` | An error. This includes the errors of the option parser: an unknown option, a missing required option, or an unknown command. `secrets doctor` exits 1 when a check fails. `secrets plan` exits 1 when the plan has an error. `secrets push` exits 1 for a plan error, a failed write, or an uncertain write. A store write exits 1 when the secret scan stops it (`SECRET_SCAN_FOUND`, `SECRET_SCAN_FAILED`). |
 | `2` | With `✘ No command to run.`: `secret` or `secrets run` with no command. The program did not start. With `✘ secrets push <target> --env prod changes production. …`: `secrets push --env prod` without `--yes`. Nothing was read or sent. |
 | `3` | A conflict in a write: another machine changed the same name to a different value. Nothing was written. (Writes are operator commands.) |
 | `126` | `secret <cmd>`: the command is not executable. |
-| `127` | `secret <cmd>`: the command is not on `PATH`. Any command: a required program (`sops`, `age-keygen`, `git`) is not on `PATH`. |
+| `127` | `secret <cmd>`: the command is not on `PATH`. Any command: a required program (`sops`, `age-keygen`, `git`) is not on `PATH`. gitleaks is optional: when it is not on `PATH`, a store write prints a warning and continues. |
 | `128 + n` | `secret <cmd>`: the signal `n` stopped the command. For example, 143 is SIGTERM. |
 | other | `secret <cmd>` exits with the exit status of the command. |
 
@@ -307,10 +356,13 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 | `✘ --store <name> does not match the store of <path>` | `--store` names another store than the mapping. | Remove `--store`. |
 | `✘ The --value for <VAR> looks like a secret (<reason>).` | `bind --value` got a value that looks like a secret. Nothing was written. | A value goes in the store: ask the operator. Then bind the secret name. |
 | `secrets: cloning the store of <project> from <url>` | The CLI makes a store clone in the secrets home (a network access). | Normal on the first run. Check that the secrets home is the intended one ([[dev-knw-nsec-model]] § The store). |
+| `✘ The secret scan (gitleaks) found <n> possible secret(s) in the change to store <store>.` | `SECRET_SCAN_FOUND`: a store write stopped (exit 1). | Stop and report. Follow [[dev-knw-nsec-rules]] § Rule 10. Never use the `SECRETS_GITLEAKS=0` hint. |
+| `✘ The secret scan (gitleaks) of the change to store <store> did not complete: <reason>.` | `SECRET_SCAN_FAILED`: a store write stopped (exit 1). | Run `secrets doctor` and report the fixed reason. Follow [[dev-knw-nsec-rules]] § Rule 10. |
+| `secrets: gitleaks is not on PATH, so the secret scan of the store commit did not run. …` | The store write had no scan. | Check the exit status, and report both facts. Follow [[dev-knw-nsec-rules]] § Rule 10. |
 
 ## Known limits
 
-These limits are in the current build (`secrets` canon `10f612f`).
+These limits are in the current build (`secrets` canon `1a8628e`).
 
 1. **The `dotenv` npm reader loses `__proto__`.** The `dotenv` package loses a variable named `__proto__` when it reads text. `secrets export --format dotenv` warns on stderr and still prints the variable. Do not name a variable `__proto__`. When a program needs one, use `--format json`, `--format shell`, or `secret <cmd>`.
 2. **The secret check of literals is not complete.** `bind` and `doctor` find a known key prefix (for example `sk_live_`), a key block, a JWT, a URL with a password, a high-entropy string of 24 or more characters, and a random token of 16 to 23 letters and digits of one letter case. In the tests of the CLI, the check found about 94% of random base36 tokens and 99.5% of random hex tokens of that length. It misses tokens with few changes between letters and digits (for example 15 letters and 1 digit) and mixed-case tokens shorter than 24 characters. A UUID and a 40-character lowercase hex string (the form of a Git commit SHA) pass, except when a word of the variable name is `SECRET`, `SECRETS`, `TOKEN`, `TOKENS`, `PASSWORD`, `PASSWD`, `PRIVATE`, `CREDENTIAL`, `CREDENTIALS`, `KEY`, `KEYS`, `APIKEY`, or `SALT`. The CLI splits the name into words at `_` and at other characters that are not letters or digits. A camelCase name such as `apiToken` is one word, so a UUID passes there. Do not rely on the check: when a value can be secret, it is not a literal.
@@ -323,3 +375,8 @@ These limits are in the current build (`secrets` canon `10f612f`).
 9. **A plan cannot see the platform.** `secrets plan` calls no platform. It cannot see the Vercel variables of other environments (a shared variable fails the push), the Railway reference variables (`skipped`), or an identifier collision (item 10). A successful plan does not prove that the push passes.
 10. **A short store value can stop a push.** The identifier check finds a credential or a store value of any length inside an id of the platform. A short value, for example `1`, can be inside an ordinary UUID by chance. Then the push stops before its first write. The operator decides. A value that is not secret can become a literal in `secrets.toml`, which is public and is not checked. A short value that is secret stays in the store, also when this rule stops the push. Agents never move a secret value into `secrets.toml`.
 11. **The platform APIs are not proven live.** The tests of the CLI use fake platform servers with the documented API forms. The first push to each live platform is the proof. `Railway can start a deployment for a removal`: Railway documents no control that stops it.
+12. **The secret scan covers only the commits of the CLI.** A manual commit in another checkout of the store has no scan. Change the managed store only through `secrets`.
+13. **The `ok` line of gitleaks is not a capability proof.** `doctor` proves only that `gitleaks version` starts. The scan is tested with gitleaks 8.30.1. An older gitleaks can stop each write that needs a commit (`SECRET_SCAN_FAILED`).
+14. **A false positive is possible.** The tests with gitleaks 8.30.1 found no false positive in SOPS ciphertext, age stanzas, or the MAC. A different value or rule can still produce a false positive. Only the operator decides that a finding is a false positive.
+15. **A late failure can leave local objects.** A scan refusal before staging writes no new Git object. A later failure can leave local objects in the store clone. Do not assume that a reset removed them.
+16. **The hint of a failed scan is short in the text output.** The text output shows the hint of `SECRET_SCAN_FAILED` only as `Next: secrets doctor`. The rule is the same: do not bypass a failed scan.

@@ -1,5 +1,5 @@
 ---
-description: "Diagnose a NUU Secrets failure from what the CLI reports: run secrets doctor, act on each warn and fail (what an agent fixes, what goes to the operator), and read secrets whoami, store list, and store sync"
+description: "Diagnose a NUU Secrets failure from what the CLI reports: run secrets doctor, act on each warn and fail (what an agent fixes, what goes to the operator), read secrets whoami, store list, and store sync, and read a refusal of a store write by the secret scan"
 ---
 
 > [!important] THIS FILE IS AN INSTRUCTION. WHEN REFERENCED IT IS MEANT TO BE TAKEN AS AN ACTION.
@@ -12,7 +12,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
 
 # Input
 
-- The failure: the command, its exit status, and its `✘` message
+- The failure: the command, its exit status, and its `✘` message (also the output of a store write that the operator sends you)
 - The project folder (it has `secrets.toml`, or a parent folder has it), or no project
 - (Optional) The environments that the task needs
 
@@ -33,11 +33,15 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    - Outside the project folder, add `--mapping <path>` or `--project <name>`.
    - Add `--env <env>` (one or more times) to check only some environments. The default is `dev`, `preview`, and `prod`.
    - The exit status is 1 when a check fails. The last line counts the results. An exit status 0 can still have `warn` and `skipped` lines.
-4. **Act on each `fail`, `warn`, and important `skipped` line.** A check can have a remedy line (`→ …`). Use this table to decide who acts. "Operator" means: do not do it yourself; put it in the report of step 9.
+4. **Act on each `fail`, `warn`, and important `skipped` line.** A check can have a remedy line (`→ …`). Use this table to decide who acts. "Operator" means: do not do it yourself; put it in the report of step 10.
 
    | Section | Message (start) | Who acts | Action |
    |---|---|---|---|
-   | Tools | `<tool> is not on PATH`, `<tool> does not start`, `sops <version> is too old` | Operator | Give the remedy line (the install command). |
+   | Tools | `ok  gitleaks <version>: the CLI scans each store commit with it` | — | Normal. It proves only that `gitleaks version` starts, not that each flag of the scan works. |
+   | Tools | `warn  gitleaks is not on PATH: the CLI does not scan store commits` | Operator | A store write on this machine has no secret scan. Give the remedy line (the install command). Ask the operator to install gitleaks. |
+   | Tools | `warn  gitleaks does not start: a write that needs a commit stops (SECRET_SCAN_FAILED)`, or `warn  gitleaks does not start` | Operator | Report it. Do not work around it: do not remove, rename, or hide gitleaks on `PATH`, and do not set `SECRETS_GITLEAKS=0`. |
+   | Tools | `warn  SECRETS_GITLEAKS=0: the CLI does not scan store commits` | Operator | An inherited switch turns off the secret scan. Report it. Ask the operator to unset it. Do not run a store write while it is set ([[dev-knw-nsec-rules]] § Rule 10). Agents never set it. |
+   | Tools | another tool: `<tool> is not on PATH`, `<tool> does not start`, `sops <version> is too old` | Operator | Give the remedy line (the install command). |
    | Key | `fail  no age key file at <path>`, `fail  the age key file <path> is not a regular file`, `fail  the age key file <path> cannot be read` | Operator | Use the key request of [[dev-sk-nsec-request_value]] (step 4): step 1a for a missing key file with no other key source, step 1c for a file that exists but cannot be used. Do not ask the operator to replace an existing file with `secrets keygen`. Do not make a key. |
    | Key | `warn  no age key file at <path>; SOPS can decrypt with <source>` | — | SOPS has another key source (`SOPS_AGE_KEY`, `SOPS_AGE_KEY_CMD`, or the SOPS default key file). Nothing to fix for SOPS. Report it once. Do not read `SOPS_AGE_KEY`, and do not run the command of `SOPS_AGE_KEY_CMD`. |
    | Key | `skipped  the public key of SOPS_AGE_KEY_CMD (the CLI does not run the command)` | — | The key of this machine is unknown to `doctor`. See the `unknown` rows. |
@@ -108,10 +112,18 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    - `The history of the remote changed (a forced push).`: tell the operator.
    - `recipients.toml changed in <n> commit(s) since the last sync:` with `+`, `-`, or `~` lines: a recipient was added, removed, or changed. Copy these lines (ids, groups, fingerprints, and authors are public) into your report for the operator.
    - `secrets: store <name>: <message>` and `<n> of <m> store(s) did not sync.`: the sync of that store failed. Give the exact line. The cause can be the network, the remote, the local clone, a link below the secrets home, or the configuration. Retry once. Then report.
-9. **Report.** Write one report with:
-   - What you fixed, and the `doctor` result after your fixes.
-   - Each item for the operator: the message, the exact command for the operator, and why.
-   - Never a value. Names, ids, public keys, fingerprints, paths, and revisions are public.
+9. **Read a refusal of a store write.** A store write is an operator command. You see its output when the operator sends it to you, or when you run an exact write command that the operator gave you. Use [[dev-knw-nsec-rules]] § Rule 10 and [[dev-knw-nsec-cli]] § The secret scan of store commits. The text output does not print the code: identify it from the start of the message.
+   - `✘ The secret scan (gitleaks) found <n> possible secret(s) …` (`SECRET_SCAN_FOUND`): stop and report `SECRET_SCAN_FOUND`. Report only the safe count, rule labels, and file labels from the CLI. Preserve any cleanup warning. Do not open the matching line. Do not bypass or repeatedly retry the finding. A finding in an encrypted file can indicate plaintext metadata, modified tooling, or a false positive. Run `secrets doctor` and report the result. Only the operator decides whether a finding is a false positive.
+   - `✘ The secret scan (gitleaks) of the change to store <store> did not complete: <reason>.` (`SECRET_SCAN_FAILED`): run `secrets doctor` and report the fixed failure reason. Preserve any cleanup warning. Do not bypass a failed scan.
+   - A message with `Nothing was pushed.`, the line `A scan refusal before staging writes no new Git object. …`, or a cleanup line such as `The CLI could not clean the clone of store <name>. …`: report it. A later failure can leave local objects. Do not assume that a reset removed them. Run the repair (`secrets store remove <name>`, then `secrets store clone <url>`) only when the operator approves it.
+   - `secrets: gitleaks is not on PATH, so the secret scan of the store commit did not run. …`: the scan did not run. Check the command's exit status. If the command succeeded, the write was made without a scan. Report both facts. Ask the operator to install gitleaks.
+   - Another fixed error of a store write (`UNSAFE_FILE`, `COMMIT_FAILED`, `WRITE_FAILED`, or `COMMIT_MISMATCH`; the message starts are in the table of [[dev-knw-nsec-cli]] § The secret scan of store commits): give the fixed text to the operator. Do not change the store clone.
+   - Never set `SECRETS_GITLEAKS=0`, and never remove, rename, or hide gitleaks on `PATH` to pass the write. Before you run a write command that the operator gave you, check for an inherited `SECRETS_GITLEAKS=0` ([[dev-knw-nsec-rules]] § Rule 10).
+10. **Report.** Write one report with:
+    - What you fixed, and the `doctor` result after your fixes.
+    - Each item for the operator: the message, the exact command for the operator, and why.
+    - Never a value. Names, ids, public keys, fingerprints, paths, and revisions are public.
+    - For a store write: copy the fixed write-error text, safe rule labels, safe file labels, and cleanup warnings. Do not copy file content or raw tool output. Older commands can show user-selected paths.
 
 # Output
 
