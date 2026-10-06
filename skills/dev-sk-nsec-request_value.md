@@ -44,7 +44,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
      secrets set <name> --env <env>
 
    Do not send me the values. Tell me when each command reports "set" or "unchanged".
-   If the command stops or warns, report its exit status. Copy the fixed write-error text, safe rule labels, safe file labels, and cleanup warnings. Do not copy file content or raw tool output. Older commands can show user-selected paths. Do not send a line if a path or another field contains a value. Instead, tell me which kind of error occurred.
+   If the command stops or warns, report its exit status. Copy the fixed write-error text, safe rule labels, safe file labels, and cleanup warnings. Do not copy file content or raw tool output. Some error lines show a path that you chose or set. Do not send a line if a path or another field contains a value. Instead, tell me which kind of error occurred.
    ```
 
    - Outside the project folder, the operator adds `--store <local store name>` or `--mapping <path>` to the command.

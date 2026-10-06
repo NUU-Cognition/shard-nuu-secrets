@@ -79,7 +79,7 @@ Other processes can read the arguments of a process. A program must read a value
 - Do not decrypt a store file. Do not run `sops` on a store file. An error of `secret` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
 - Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, or `stores.toml` by hand.
 - Do not run Git commands in a store clone, and do not delete a store clone. Do not delete a `.removing-*` folder in the stores folder: report it to the operator. To refresh a store clone, first run plain `secrets doctor` for that store (Rule 6). Then run `secrets store sync <name>`, or `secrets doctor --online` with the same options.
-- Do not move, link, or replace folders in the secrets home. Managed-clone checks refuse linked folders below the real secrets home. Store-file checks refuse non-regular files. Not every metadata command runs every check. Report each refusal to the operator.
+- Do not move, link, or replace folders in the secrets home. Managed-clone checks refuse linked folders below the real secrets home. Store-file checks refuse non-regular files. Both refuse a file or a folder that they cannot check (`… cannot check …`, `… cannot be checked (<code>)`). Not every metadata command runs every check. Report each refusal to the operator. Do not change modes to pass a check.
 
 ## Rule 5 — Operator-only commands
 
@@ -93,7 +93,7 @@ The operator enters values and manages keys. Do not run these commands. The one 
 | `secrets keygen`, `secrets keygen --out <file>`, `secrets keygen --public --file <path>` | Make an age private key, or read another key file. `secrets keygen --public` with no `--file` is not on this list (see Rule 6). |
 | `secrets recipient add`, `secrets recipient rm` | Change who can open the store. |
 | `secrets store init` | Creates a store. |
-| `secrets store fix-config` | Writes the generated `.sops.yaml` and `.gitleaks.toml` again: one commit and one push. |
+| `secrets store fix-config` | Writes the generated `.sops.yaml` and `.gitleaks.toml` again: one commit and one push. After cycle H, each existing store needs it once ([[dev-knw-nsec-cli]] § The config of stores). Report the `doctor` warning and the exact command to the operator. |
 | `secrets store remove` | Removes a store clone and its entry in `stores.toml` (local state). The operator runs it from a folder outside the clone. |
 | `secrets login`, `secrets logout` | Change the NUU account of the operator. |
 | `secrets push` (every environment: `dev`, `preview`, `prod`) | Sends values to a platform (Vercel, Convex, Railway). It can remove variables, and on Convex the change takes effect at once. See Rule 9. |
@@ -175,8 +175,9 @@ Before a store commit, the CLI scans the exact bytes of the change unless gitlea
 - **Cleanup.** A scan refusal before staging writes no new Git object. Preserve any cleanup warning. A later failure can leave local objects. Do not assume that a reset removed them.
   - A message with `Nothing was pushed.` and the repair ``Run `secrets store remove <name>`, then `secrets store clone <url>`.``: report it to the operator. Run the repair only when the operator approves it. `store remove` is an operator command (Rule 5).
   - A cleanup line can name a folder that holds copies of the scanned bytes (`The CLI could not delete its private scan folder <folder>. Delete it.`). Do not open the files in that folder. Report the line to the operator. The operator deletes the folder.
+- **Other refusals of a store write.** `UNSAFE_STORE` (`✘ A file of store <store> breaks the store policy. …`) and `UNSAFE_RESULT` (`✘ The result of a SOPS write breaks the store policy. …`) name a file label, a line number, and a field name, for example `the SOPS metadata field "version" does not have the form that SOPS writes`. Report these facts to the operator. Do not retry the write. Do not open the store file. For `UNSAFE_FILE`, `COMMIT_FAILED`, `WRITE_FAILED`, and `COMMIT_MISMATCH`, give the fixed text to the operator, and do not change the store clone ([[dev-knw-nsec-cli]] § The messages of a store write).
 - **No gitleaks on `PATH`.** The warning is `secrets: gitleaks is not on PATH, so the secret scan of the store commit did not run. …`. The scan did not run. Check the command's exit status. If the command succeeded, the write was made without a scan. Report both facts. Ask the operator to install gitleaks.
-- **What to copy.** Copy the fixed write-error text, safe rule labels, safe file labels, and cleanup warnings. Do not copy file content or raw tool output. Older commands can show user-selected paths.
+- **What to copy.** Copy the fixed write-error text, safe rule labels, safe file labels, field names, and cleanup warnings. Do not copy file content or raw tool output. Some error lines show a path that the user chose or set. The output rules of the CLI do not cover the text of that path. Do not copy a line when its path or another field holds a value: name the kind of error.
 - **Manual commits.** Change the managed store only through `secrets`. The CLI scan does not cover a manual commit in another checkout. Never make a Git commit in a store clone yourself (Rule 4).
 
 In a headless session, a scan refusal and an inherited `SECRETS_GITLEAKS=0` are blockers. See [[dev-hinit-nsec]].

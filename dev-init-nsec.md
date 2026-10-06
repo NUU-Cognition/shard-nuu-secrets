@@ -45,6 +45,7 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 | A project has no `secrets.toml`, or a variable has no entry | [[dev-sk-nsec-setup_project]] |
 | `secret` or `secrets` fails, or access is not correct | [[dev-sk-nsec-diagnose]] |
 | A store write stops with the secret scan, or `doctor` warns about gitleaks | [[dev-sk-nsec-diagnose]] (step 9) and [[dev-knw-nsec-rules]] § Rule 10 |
+| `doctor` warns `.gitleaks.toml differs from the text that the CLI generates` | [[dev-sk-nsec-diagnose]] (step 4): give the operator the exact `secrets store fix-config --store <name>` command; never run it |
 | A value or a key is missing | [[dev-sk-nsec-request_value]] |
 | Prepare a push to Vercel, Convex, or Railway | [[dev-sk-nsec-plan_push]] |
 | A question about the store, names, targets, or literals | [[dev-knw-nsec-model]] |

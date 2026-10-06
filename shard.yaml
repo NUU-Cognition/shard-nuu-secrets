@@ -8,4 +8,4 @@ name: NUU Secrets
 shorthand: nsec
 description: "Teaches agents to use NUU Secrets safely: run apps with secrets, map variables, diagnose, and follow the no-value rules"
 dependencies:
-  "@nuucognition/flint": "^0.3"
+  "@nuucognition/flint": "^0"

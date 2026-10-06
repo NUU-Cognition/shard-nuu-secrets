@@ -80,6 +80,7 @@ Prepare the delivery of the variables of one environment to a platform. You run 
    ```
 
 9. **Read the push output that the operator gives you.**
+   - `✘ secrets push <target> --env prod changes production. … Nothing was read or sent.` with `Next: secrets plan <target> --env prod` and `With the approval of the operator, run the push again with --yes.` (exit 2): the push sent nothing. The operator decides about `--yes`. Never add `--yes` yourself, and never run the push.
    - `set`, `removed`, `unchanged`: done. `skipped <VAR> (reference variable)`: Railway keeps its reference; the store value is not on Railway.
    - `failed <VAR> (<reason>)`: the platform refused the write, or the push did not send it. The reason is a fixed text. Do not try to get the message of the platform from another source. Give the operator the line and stderr.
    - `uncertain <VAR> (<reason>; the platform can have the change)`, with `secrets: Check each uncertain variable on the platform before you run the push again.`: never suggest that the push runs again at once. Show the operator the confirmed writes and the uncertain writes from stderr. The operator checks each uncertain variable on the platform first.

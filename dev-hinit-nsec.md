@@ -32,7 +32,7 @@ The complete rules are in [[dev-knw-nsec-rules]].
    - a `doctor` item that only the operator can fix ([[dev-sk-nsec-diagnose]]);
    - a tool needs a file with values;
    - a push to a platform: only the operator runs `secrets push` ([[dev-sk-nsec-plan_push]]);
-   - a store write stops with the secret scan (`SECRET_SCAN_FOUND` or `SECRET_SCAN_FAILED`), or its message has a cleanup line or `Nothing was pushed.` ([[dev-sk-nsec-diagnose]], step 9);
+   - a store write stops with the secret scan (`SECRET_SCAN_FOUND` or `SECRET_SCAN_FAILED`) or with the store policy (`UNSAFE_STORE` or `UNSAFE_RESULT`: a field name, never a value), or its message has a cleanup line or `Nothing was pushed.` ([[dev-sk-nsec-diagnose]], step 9);
    - the environment of a store write that you may run has `SECRETS_GITLEAKS=0` (the `doctor` line `SECRETS_GITLEAKS=0: the CLI does not scan store commits`).
 
    For a blocker, do not invent a value. Do not use a placeholder that looks real. Do not remove the variable from the mapping to make the run pass. Do not skip the check and report success. Do not turn off the secret scan. Write the request with [[dev-sk-nsec-request_value]] (a value or a key) or with the report of [[dev-sk-nsec-diagnose]] (an operator fix, also a scan refusal), set the `blockers` key, and deliver it as in [Result Delivery](#result-delivery).

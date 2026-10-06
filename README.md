@@ -8,7 +8,7 @@ This folder is the remote source of the shard (shorthand `nsec`, package `@nuuco
 
 ## Structure
 
-- `shard.yaml` — the manifest. It depends on `@nuucognition/flint` `^0.3`. No types, folders, setup, or install files.
+- `shard.yaml` — the manifest. It depends on `@nuucognition/flint` `^0` (each `0.x` version: the published core `0.3.x` and `0.4.x`). No types, folders, setup, or install files.
 - `dev-init-nsec.md` — the interactive init: what NUU Secrets is, the rules in short, and the situations.
 - `dev-hinit-nsec.md` — the headless init for Orbh sessions: the same rules, no interactive prompts, and blockers to the dispatcher or the operator.
 - `knowledge/dev-knw-nsec-rules.md` — the complete agent rules (the required reading).
@@ -35,4 +35,4 @@ Edit the files of this folder. Then build the shard again:
 flint shard build nuu-secrets
 ```
 
-The command facts come from the `secrets` CLI at canon `1a8628e` (`secrets --help` and the README of `NUU-Cognition/secrets`). When the CLI changes, check each command, option, and message of the knowledge files and the skills again.
+The command facts come from the `secrets` CLI at canon `35ecaba` (`secrets --help` and the README of `NUU-Cognition/secrets`). When the CLI changes, check each command, option, and message of the knowledge files and the skills again.
