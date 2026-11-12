@@ -1,10 +1,21 @@
 ---
-description: "The secrets CLI for agents: each command and its options, the output rules, the exit statuses, the messages that agents see, the operator-only commands, the secret scan of store commits, and the known limits of the current build"
+description: "The secrets CLI for agents: the install, each command and its options, the output rules, the exit statuses, the messages that agents see, the operator-only commands, the secret scan of store commits, and the known limits of the current build"
 ---
 
 # Knowledge: The `secrets` CLI
 
-The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. `ndv` links both commands. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `35ecaba`.
+The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `35ecaba`. The npm version `0.1.0-beta.0` has the same code.
+
+## Install
+
+Only the operator installs the CLI. An agent does not install it.
+
+- **From npm.** `npm install -g @nuucognition/secrets-cli@beta`. The package gives the two commands `secrets` and `secret`. It needs Node.js 24 or later. The version on the npm tag `beta` is `0.1.0-beta.0` (the code of canon `35ecaba`). `secrets --version` shows the version that is installed.
+- **In the NUU Cognition workspace.** `ndv` links the two commands: `ndv use secrets dev` for the dev build, `ndv use secrets npm beta` for the npm package.
+- **The other tools.** The package does not include SOPS, age, Git, or gitleaks. `secrets doctor` checks each tool and gives its install command (section Tools).
+- **The build mode.** The npm package is the prod build. Its default secrets home is `<NUU home>/secrets/` ([[dev-knw-nsec-model]] § The store).
+
+When the shell cannot find `secrets` or `secret` (`command not found`, exit status 127), stop. Do not install the CLI, and do not run it with `npx`. Ask the operator to install it with the npm command above.
 
 ## Commands for agents
 

@@ -26,6 +26,7 @@ The complete rules are in [[dev-knw-nsec-rules]].
 
 1. **No interactive prompt.** Never start a command that waits for a person: `secrets set` (a hidden prompt), `secrets edit` (an editor), or `secrets login` (a browser). These are operator commands.
 2. **A blocker goes to a person, never to a guess.** These are blockers:
+   - the shell cannot find `secrets` or `secret` (`command not found`): the operator installs the CLI with `npm install -g @nuucognition/secrets-cli@beta` ([[dev-knw-nsec-cli]] § Install). Do not install it, and do not run it with `npx`;
    - a value is missing (`✘ <n> variable(s) have no value in env <env> …`, or a `doctor` line `… is not in the store`);
    - `secret` stops with `✘ No usable age key: …`, or `doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`;
    - `--offline` stops with `… has no cached clone on this machine` and the task forbids network access;

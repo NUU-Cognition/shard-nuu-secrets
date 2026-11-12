@@ -43,6 +43,7 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 |---|---|
 | Run an app, a test, or a script with its secrets | [[dev-sk-nsec-run_app]] |
 | A project has no `secrets.toml`, or a variable has no entry | [[dev-sk-nsec-setup_project]] |
+| The shell cannot find `secrets` or `secret` | [[dev-knw-nsec-cli]] § Install: ask the operator to install the CLI |
 | `secret` or `secrets` fails, or access is not correct | [[dev-sk-nsec-diagnose]] |
 | A store write stops with the secret scan, or `doctor` warns about gitleaks | [[dev-sk-nsec-diagnose]] (step 9) and [[dev-knw-nsec-rules]] § Rule 10 |
 | `doctor` warns `.gitleaks.toml differs from the text that the CLI generates` | [[dev-sk-nsec-diagnose]] (step 4): give the operator the exact `secrets store fix-config --store <name>` command; never run it |
@@ -77,3 +78,5 @@ secrets plan <target> --env <env>        # what a push sends: names and statuses
 ```
 
 Use the `secrets` command that is on `PATH`. Its build mode (prod or dev) changes the default secrets home. See [[dev-knw-nsec-model]] § The store.
+
+When the shell cannot find `secrets`, do not install it yourself. Ask the operator to install the CLI: `npm install -g @nuucognition/secrets-cli@beta` (Node.js 24 or later). See [[dev-knw-nsec-cli]] § Install.
