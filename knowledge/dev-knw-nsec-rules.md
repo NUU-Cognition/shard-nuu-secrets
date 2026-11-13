@@ -1,5 +1,5 @@
 ---
-description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup); how to ask for a value; the secret scan of store commits; what to do after a leak"
+description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup and the identity changes); how to ask for a value; the secret scan of store commits; agents never use secrets ui; use the identity that the CLI selects and stop on an identity problem; what to do after a leak"
 ---
 
 # Knowledge: Agent Rules
@@ -18,7 +18,10 @@ This shard uses one word for one thing.
 | environment | The store environment that `--env` selects: `dev`, `preview`, `prod`, or `deploy`. |
 | store | The Git repository of the team that holds the encrypted values (SOPS + age). |
 | store clone | The copy of the store on this machine, at `<secrets home>/stores/<store name>/`. The CLI owns it as a cache. |
-| key file | The age private key of this machine: `$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`. |
+| key file | An age private key file of this machine. For each command, the CLI selects one key file: the key file of an identity, `$SOPS_AGE_KEY_FILE`, or `~/.config/sops/age/keys.txt` ([[dev-knw-nsec-model]] § Identities and the key selection). |
+| identity | A name for one key file of this machine, in `identities.toml` of the secrets home. The file holds names and paths, never a key. One machine can have several identities. An identity is not a security boundary between people. |
+| project index | `projects.toml` in the secrets home: the projects of this machine, with the path of each `secrets.toml`, the project name, the store name, and the project identity. It holds no value. |
+| the UI | `secrets ui`: the local web page for the operator. It shows the stores, the projects, and the values (hidden until a reveal). Agents never use it (Rule 11). |
 | store write | A command that changes the store with one Git commit and one push: `secrets store init`, `set`, `unset`, `edit`, `recipient add|rm`, and `store fix-config`. Each store write is an operator command (Rule 5). |
 | secret scan | The gitleaks scan that the CLI runs on the bytes of each store commit before the commit (Rule 10). |
 | operator | The person who owns this machine and its store access. Only the operator enters values and manages keys. |
@@ -74,10 +77,10 @@ Other processes can read the arguments of a process. A program must read a value
 
 ## Rule 4 — Never touch the key or the store files
 
-- Do not open, print, copy, move, or change the key file. To check the key, run `secrets doctor` (the path, the mode, and the fingerprint), `secrets whoami` (the fingerprint and the path), or `secrets keygen --public` (the full public key; it makes no key). The fingerprint is the last 8 characters of the public key.
+- Do not open, print, copy, move, or change a key file. This applies to each key file of each identity (the `KEY FILE` column of `secrets identity list`) and to each file in `<secrets home>/keys/`. To check the key, run `secrets doctor` (the key selection, the path, the mode, and the fingerprint), `secrets whoami` (the identity, the fingerprint, and the path), `secrets identity list` (the public key of each identity), or `secrets keygen --public` (the full public key of the selected key file; it makes no key). The fingerprint is the last 8 characters of the public key.
 - Do not read or print the variable `SOPS_AGE_KEY`: it can hold a private key. Do not run the command of `SOPS_AGE_KEY_CMD`.
 - Do not decrypt a store file. Do not run `sops` on a store file. An error of `secret` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
-- Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, or `stores.toml` by hand.
+- Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `stores.toml`, `identities.toml`, or `projects.toml` by hand. Do not add an `identity` key to `secrets.local.toml`: a project file never selects an identity, and the CLI ignores the key with a warning (Rule 12).
 - Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` with the commands of Rule 6 (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), not by hand. These commands check the result and refuse a bad change. When a command cannot edit an unusual form of the file (`MAPPING_EDIT`), report it to the operator.
 - Do not run Git commands in a store clone, and do not delete a store clone. Do not delete a `.removing-*` folder in the stores folder: report it to the operator. To refresh a store clone, first run plain `secrets doctor` for that store (Rule 6). Then run `secrets store sync <name>`, or `secrets doctor --online` with the same options.
 - Do not move, link, or replace folders in the secrets home. Managed-clone checks refuse linked folders below the real secrets home. Store-file checks refuse non-regular files. Both refuse a file or a folder that they cannot check (`… cannot check …`, `… cannot be checked (<code>)`). Not every metadata command runs every check. Report each refusal to the operator. Do not change modes to pass a check.
@@ -99,6 +102,11 @@ The operator enters values and manages keys. Do not run these commands. The one 
 | `secrets store remove` | Removes a store clone and its entry in `stores.toml` (local state). The operator runs it from a folder outside the clone. |
 | `secrets login`, `secrets logout` | Change the NUU account of the operator. |
 | `secrets push` (every environment: `dev`, `preview`, `prod`) | Sends values to a platform (Vercel, Convex, Railway). It can remove variables, and on Convex the change takes effect at once. See Rule 9. |
+| `secrets identity add`, `secrets identity use`, `secrets identity rm` | Add an identity (also a new key), change the default identity, or remove an identity. They change the key file that a command uses. See Rule 12. |
+| `secrets project identity <name>`, `secrets project identity --clear` | Set or remove the identity of a project on this machine (in `projects.toml`). `secrets project identity` with no name and no `--clear` only shows it (Rule 6). See Rule 12. |
+| `secrets project forget <name\|path>` | Removes the entries of a project from the project index. An entry can hold the project identity: without it, the default identity applies, and the default can have more access. See Rule 12. |
+
+`secrets ui` is not on this list: an agent never runs it, also when the operator asks (Rule 11).
 
 "The operator asks" means: the operator (or your dispatcher, for the operator) names this command for this action in this session. A general task, for example "set up the secrets of the app", does not give this permission.
 
@@ -116,7 +124,10 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 | `secrets doctor` | Check the tools, the key, the stores, the mapping, and the project. Without `--online`, it changes nothing. See [[dev-sk-nsec-diagnose]]. |
 | `secrets doctor --online` | The same checks after a refresh: it fetches each checked clone and resets it to the remote. The reset discards the local changes of an interrupted command in the clone (a cache that the CLI owns). It never clones a missing store. Run it only after a plain `secrets doctor` with the same options. |
 | `secrets keygen --public` | Print the full public key of the key file of this machine. It makes no key and never prints the private key. Use it only with no `--file`. |
-| `secrets whoami` | Show the recipient id, the key fingerprint, and the stores of this machine. |
+| `secrets whoami` | Show the recipient id, the selected identity, the key fingerprint, and the stores of this machine. |
+| `secrets identity list` | List the identities: the names, the public keys, the key file paths and their state, the default, the stores and groups of each identity, and the `active:` line (the key that the CLI selects here). No private key. Do not open the key files that it names (Rule 4). |
+| `secrets project list` | List the project index: name, store, identity, the last load, the state (`ok`, `missing`, `linked`, `duplicate`), and the path. No values. |
+| `secrets project identity` (no name, no `--clear`) | Show the identity of the project of the current folder (or of `--mapping <path>`). It changes nothing. |
 | `secrets store list` | List the store clones of this machine (no values). |
 | `secrets store sync <name>` | Refresh one store clone that a plain `secrets doctor` checked first. Always name the store. |
 | `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secret` without `--offline` clones the store when necessary. |
@@ -142,7 +153,7 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 
 ## Rule 7 — Ask the operator for values and keys
 
-When a value or a key is missing, ask the operator. Give the variable, the secret name, the environment, and the exact command for the operator. Never ask the operator to paste a value into the chat, a file, or a message. Never guess a value, and never use a placeholder value that looks real. Use [[dev-sk-nsec-request_value]].
+When a value or a key is missing, ask the operator. Give the variable, the secret name, the environment, and the exact command for the operator. The operator sets a value with `secrets set <name> --env <env>` in their own terminal, or in the page of `secrets ui` (Rule 11). Then you continue with `secret <cmd>`. Never ask the operator to paste a value into the chat, a file, or a message. Never guess a value, and never use a placeholder value that looks real. Use [[dev-sk-nsec-request_value]].
 
 ## Rule 8 — Platform targets need the operator
 
@@ -189,11 +200,46 @@ Before a store commit, the CLI scans the exact bytes of the change unless gitlea
 
 In a headless session, a scan refusal and an inherited `SECRETS_GITLEAKS=0` are blockers. See [[dev-hinit-nsec]].
 
+## Rule 11 — The UI (`secrets ui`) is for the operator
+
+`secrets ui` starts a local web page on `127.0.0.1`. The page shows the stores, the projects, and the values of this machine. A reveal or a copy in the page gives a value. Thus the UI is for a person at a terminal, never for an agent.
+
+- **Never run `secrets ui`.** This applies to each option (`--no-open`, `--identity`, `--idle`), and also when the operator asks. With no terminal, the CLI refuses: `✘ secrets ui needs a terminal on stdin and stdout: the UI is for a person at a terminal. Nothing was started.` (`NO_TERMINAL`). Do not give it a terminal (a pseudo-terminal, `script`, `expect`, `tmux`, or a terminal tool of your harness).
+- **Never read values from the UI.** Do not open the URL or the login link of the UI. Do not open the page in a browser or in a browser tool. Do not send a request to its server or its API (`curl`, `fetch`, or another HTTP client to `127.0.0.1:<port>`). Do not read its launch file: it holds the login token.
+- **A login link is a credential.** The link has the form `http://127.0.0.1:<port>/#t=<token>`. When the operator sends you a link of this form, do not open it, and do not repeat the token. Tell the operator that the link is now in the session transcript. The token works one time, in the first 60 seconds. For a new link, the operator stops `secrets ui` and runs it again.
+- **The reveal log is for the operator.** `<secrets home>/ui-reveal.log` holds one line for each reveal or copy: the time, the identity, the store, the environment, and the name, never the value. Do not change or delete it.
+- **What you do.** You use `secret <cmd>` to run a program with the values. You ask the operator to set a value in the UI or with `secrets set` ([[dev-sk-nsec-request_value]]). The writes of the page are operator writes: they use the write path of the CLI (the lock, the policy check, the secret scan, the commit, and the push). When the operator sends you an error of the page, read it as a message of the CLI ([[dev-sk-nsec-diagnose]]).
+
+## Rule 12 — Identities: use the identity that the CLI selects
+
+The CLI selects one key file for each command. The selection order is in [[dev-knw-nsec-model]] § Identities and the key selection. The identity decides which stores and groups a command opens. Thus a change of the identity can give a command more access, or less access.
+
+- **Use the selection of the CLI.** Run your commands with the identity that the CLI selects. Do not add `--identity <name>`. Do not set, change, or unset `SECRETS_IDENTITY` or `SOPS_AGE_KEY_FILE`. The one exception: the operator (or the task, for the operator) names the identity for that command.
+- **Do not change the identities.** Do not run `secrets identity add`, `secrets identity use`, `secrets identity rm`, `secrets project identity <name>`, `secrets project identity --clear`, or `secrets project forget`, unless the operator asks for that exact command (Rule 5). Do not edit `identities.toml` or `projects.toml` (Rule 4).
+- **You can read them.** `secrets identity list`, `secrets project list`, `secrets project identity` (with no name and no `--clear`), `secrets whoami`, and `secrets doctor` (the line `key selection: …`) show the identities and the selection. They show no private key and no value (Rule 6).
+- **Stop on an identity problem.** When a command or `secrets doctor` reports one of these problems, stop the work that needs the key. Tell the operator the exact message and the remedy lines (the hints under the `✘` line, or the `→` line of `doctor`). Do not apply a remedy yourself: no `--identity`, no `--clear`, no `forget`, no change of a link, and no run from another folder or with another `--mapping` to pass the check. The operator decides.
+
+  | Problem (code) | The message starts with |
+  |---|---|
+  | `LINKED_MAPPING` | `✘ <path> is a symbolic link now, …` or `✘ <path> goes through the symbolic link <link> now, …`, then `and projects.toml has the identity <name> for that path. The CLI does not use the identity of a project through a link, …` |
+  | `MAPPING_CHANGED` | `✘ The CLI cannot prove that <path> is the secrets.toml that it read: the file changed during the command. …` |
+  | `OUTSIDE_PROJECT` | `✘ <path> is outside the project of the current folder (<boundary>). The identity <name> of that secrets.toml in projects.toml applies only in its own project (its folder, or its Git repository), …` |
+  | `DUPLICATE_PROJECT` | `✘ projects.toml has <n> entries for one secrets.toml (<path>), with different identities:` |
+  | `UNKNOWN_IDENTITY` | `✘ There is no identity named "<name>" (<where>).` |
+  | `PROJECT_INDEX` | `✘ The CLI cannot read the identity of project <name>: …` |
+  | the parent warning | `secrets: warning: <path> has no identity of its own in projects.toml, so the CLI uses <identity or key file>. The secrets.toml above it in the same project, <path> (project <name>), has the identity <name>. …` |
+  | the link warning | `secrets: warning: … so the identity <name> of its target <path> in projects.toml does not apply (a link can name the secrets.toml of another project). …` |
+
+  The two warnings do not stop the command: the command ran with another key than the project identity, often with the default identity. Stop after the command, and report the warning before more work in that project. The other problems stop the command: nothing was read or written.
+- **An identity is not a security boundary.** Each process of your operating-system user can read each key file and change `identities.toml` and `projects.toml`. The rules prevent accidents ([An agent is a user](#an-agent-is-a-user)).
+
+In a headless session, an identity problem is a blocker. See [[dev-hinit-nsec]].
+
 ## Tests of the CLI itself
 
 This shard is for the use of NUU Secrets in projects. A task that tests the `secrets` CLI itself (not an app) needs a sandbox:
 
-- In each command that runs `secrets` or `secret`, set `HOME`, `SECRETS_HOME`, `NUU_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, and `TMPDIR` to temporary folders. Set `SOPS_AGE_KEY_FILE` to a file path in the temporary root folder (for example `<temp root>/home/keys.txt`). Unset `SOPS_AGE_KEY` and `SOPS_AGE_KEY_CMD`: SOPS can use them, and the SOPS default key file under `XDG_CONFIG_HOME`, as other key sources. Unset `SECRETS_GITLEAKS`: an inherited `SECRETS_GITLEAKS=0` turns off the secret scan of the test store (Rule 10).
+- In each command that runs `secrets` or `secret`, set `HOME`, `SECRETS_HOME`, `NUU_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, and `TMPDIR` to temporary folders. Set `SOPS_AGE_KEY_FILE` to a file path in the temporary root folder (for example `<temp root>/home/keys.txt`). Unset `SOPS_AGE_KEY` and `SOPS_AGE_KEY_CMD`: SOPS can use them, and the SOPS default key file under `XDG_CONFIG_HOME`, as other key sources. Unset `SECRETS_GITLEAKS`: an inherited `SECRETS_GITLEAKS=0` turns off the secret scan of the test store (Rule 10). Unset `SECRETS_IDENTITY`: it selects an identity before `SOPS_AGE_KEY_FILE`. The temporary `SECRETS_HOME` has its own `identities.toml` and `projects.toml`, so the test does not change the identities or the project index of the operator.
 - Use test keys (`age-keygen`), a local bare Git repository as the store remote, and made-up test values.
 - Never read or change the real key file or the real store clones.
 - Delete the temporary folders at the end.

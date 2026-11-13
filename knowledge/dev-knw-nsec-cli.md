@@ -1,16 +1,16 @@
 ---
-description: "The secrets CLI for agents: the install, each command and its options (also the setup commands: setup --print, vars, target, unbind, bind --local, project), the output rules, the exit statuses, the messages that agents see, the operator-only commands, the secret scan of store commits, and the known limits of the current build"
+description: "The secrets CLI for agents: the install, each command and its options (also the setup commands: setup --print, vars, target, unbind, bind --local, project; and --identity, identity list, project list, project identity), the operator commands (also identity add|use|rm, project identity <name>, project forget, and secrets ui, which agents never run), the output rules, the exit statuses, the messages that agents see, the secret scan of store commits, and the known limits of the current build"
 ---
 
 # Knowledge: The `secrets` CLI
 
-The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `471e270` (cycle I: the guided setup and the setup commands). The npm version `0.1.0-beta.1` has the same code. The setup of a team, a machine, and a project is in [[dev-knw-nsec-setup]].
+The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI of Mission 002 (branch `even-macbook`, not yet on canon): the CLI of canon `471e270` (cycle I: the guided setup and the setup commands), with the identities, the project index, and `secrets ui`. The npm version `0.1.0-beta.1` has the code of canon `471e270`: it has no identities, no project index, and no `secrets ui`. The setup of a team, a machine, and a project is in [[dev-knw-nsec-setup]].
 
 ## Install
 
 Only the operator installs the CLI. An agent does not install it.
 
-- **From npm.** `npm install -g @nuucognition/secrets-cli@beta`. The package gives the two commands `secrets` and `secret`. It needs Node.js 24 or later. The version on the npm tag `beta` is `0.1.0-beta.1` (the code of canon `471e270`). The older `0.1.0-beta.0` has no setup commands. `secrets --version` shows the version that is installed.
+- **From npm.** `npm install -g @nuucognition/secrets-cli@beta`. The package gives the two commands `secrets` and `secret`. It needs Node.js 24 or later. The version on the npm tag `beta` is `0.1.0-beta.1` (the code of canon `471e270`). The older `0.1.0-beta.0` has no setup commands. The identities, the project index, and `secrets ui` come with a later npm version. `secrets --version` shows the version that is installed. On a build without identities, `secrets --help` lists no `identity` command: then the rules of identities do not apply, and the key file is `$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`.
 - **In the NUU Cognition workspace.** `ndv` links the two commands: `ndv use secrets dev` for the dev build, `ndv use secrets npm beta` for the npm package.
 - **The other tools.** The package does not include SOPS, age, Git, or gitleaks. `secrets doctor` checks each tool and gives its install command (section Tools).
 - **The build mode.** The npm package is the prod build. Its default secrets home is `<NUU home>/secrets/` ([[dev-knw-nsec-model]] § The store).
@@ -22,7 +22,7 @@ When the shell cannot find `secrets` or `secret` (`command not found`, exit stat
 ### `secret <cmd>` and `secrets run`
 
 ```sh
-secret [--env <env>] [--offline] [--keep-env] [--mapping <path> | --project <name>] [--store <name>] [--] <cmd> [args…]
+secret [--env <env>] [--offline] [--keep-env] [--mapping <path> | --project <name>] [--store <name>] [--identity <name>] [--] <cmd> [args…]
 ```
 
 Runs `<cmd>` with the variables of the `local` target in its process environment. It writes no file with a plaintext value. A refresh or a first clone of the store changes the Git files and the index of the store clone in the secrets home. These files hold ciphertext and public data only.
@@ -35,7 +35,9 @@ Runs `<cmd>` with the variables of the `local` target in its process environment
 | `--mapping <path>` | The `secrets.toml` of the project. |
 | `--project <name>` | The `secrets.toml` with this project name in the current Git repository. |
 | `--store <name>` | The store. It must be the store of the `secrets.toml`. Usually you do not need it. |
+| `--identity <name>` | The identity (a name of `identities.toml`) for this command. It wins over `SECRETS_IDENTITY`, `SOPS_AGE_KEY_FILE`, the project identity, and the default. Use it only when the operator names the identity ([[dev-knw-nsec-rules]] § Rule 12). |
 
+- **`--identity` on other commands.** Each command that decrypts or reads the key has `--identity <name>` with the same meaning: `run`, `export`, `plan`, `push`, `set`, `unset`, `edit`, `recipient add|rm`, `store init|clone`, `doctor`, `setup`, `keygen`, and `whoami`. The same rule applies: only with the identity that the operator names. The key selection is in [[dev-knw-nsec-model]] § Identities and the key selection.
 - Put the options first. The first word that is not an option starts the command. `--` also starts it. The CLI gives the rest to the command without a change.
 - Use `--mapping` or `--project`, not both.
 - When the mapping has a `ref` entry, the CLI first checks the key file. Then it selects the store and, when necessary, clones it.
@@ -123,7 +125,7 @@ The environments: Vercel `dev → development`, `preview → preview`, `prod →
 ### `secrets doctor`
 
 ```sh
-secrets doctor [--mapping <path> | --project <name>] [--store <name>] [--env <env>]… [--online]
+secrets doctor [--mapping <path> | --project <name>] [--store <name>] [--env <env>]… [--online] [--identity <name>]
 ```
 
 Checks the tools, the key, the stores, the mapping, the project hygiene, and the disk encryption. Each check is `ok`, `warn`, `fail`, or `skipped`. A `warn` or `fail` check can have a remedy line (`→ …`). The last line is `doctor: <n> ok, <n> warn, <n> fail, <n> skipped`. The exit status is 1 when a check fails.
@@ -134,6 +136,7 @@ Checks the tools, the key, the stores, the mapping, the project hygiene, and the
 | `--store <name>` | Check this store. |
 | `--env <env>` | An environment for the `ref` checks. Repeat it for more environments. The default is `dev`, `preview`, and `prod`. |
 | `--online` | First refresh each checked clone (fetch and reset to the remote), then check. |
+| `--identity <name>` | Check with this identity. Use it only when the operator names the identity ([[dev-knw-nsec-rules]] § Rule 12). |
 
 - **Without `--online`**, `doctor` reads the cached clones. It makes no network call and changes nothing. Each store section names the cached revision and its date: `ok  cached revision <revision> (<date>): doctor reads the clone offline, so it can be older than the remote (…)`.
 - **With `--online`**, `doctor` fetches each checked clone and resets it to the remote. The store clone is a cache that the CLI owns: the reset discards the local changes and commits of an interrupted command. `--online` never changes the remote, and it never clones a store that has no clone. The line is `ok  revision <revision> (<date>), refreshed from the remote just now (--online)`. A failed refresh is `fail  --online: cannot refresh the clone: …`, and then the checks of the cached clone follow (`warn  cached revision …: the refresh failed, so the clone can be older than the remote`).
@@ -147,12 +150,15 @@ Checks the tools, the key, the stores, the mapping, the project hygiene, and the
 - **The `.gitleaks.toml` lines** (section Store). `doctor` compares the `.gitleaks.toml` of the clone with the text that the CLI generates. It never shows the content.
   - `ok  .gitleaks.toml allows only the recipient key lines of recipients.toml`: the file is the generated text. This line is not a result of a gitleaks scan.
   - `warn  .gitleaks.toml differs from the text that the CLI generates` (also for the text of an earlier version of the CLI), or `warn  .gitleaks.toml is missing`, with the remedy ``→ run `secrets store fix-config --store <name>` (gitleaks then allows only the recipient key lines of recipients.toml)``. `store fix-config` is an operator command ([The config of stores](#the-config-of-stores)).
+- **The key selection** (section Key). The first Key line is `ok  key selection: <reason>`, for example `key selection: identity work (the default of identities.toml)` or `key selection: the default key file (no identity)`. It names the step of the selection ([[dev-knw-nsec-model]] § Identities and the key selection). When the selection is not valid (for example an unknown identity name), the line is `fail  There is no identity named "<name>" (<where>)…` with the remedy ``→ run `secrets identity list`, then select an identity that exists (--identity, SECRETS_IDENTITY, `secrets project identity <name>`, or `secrets identity use <name>`)``. A missing key file of an identity is `fail` with the remedy ``→ run `secrets identity list` to check the key file of the identity <name>``.
+- **The project index** (section `Projects (projects.toml)`, only when the file exists). `ok  <n> project(s), each path exists`, or a `warn` line for each missing path (`the path of project <name> is missing: <path>`, ``→ when the project is gone, run `secrets project forget <path>` ``) and for each duplicate entry (`the entry <path> of project <name> is for the same secrets.toml as another entry (identity <name>)`, ``→ run `secrets project identity <name> --mapping <path>` (or --clear): it makes the entries one entry``). `doctor` removes nothing. Both remedies are operator commands.
+- **Identity problems of the mapping.** When the mapping step stops on an identity problem (`LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`), `doctor` shows the error and its remedy lines. Stop and report them ([[dev-knw-nsec-rules]] § Rule 12).
 - Before `secrets doctor --online`, run plain `secrets doctor` with the same mapping, store, and environment options. Before `secrets store sync <name>`, run plain `secrets doctor` that checks the named store. For sync, pass that store name as the argument. Refresh only stores that the plain check covered ([[dev-knw-nsec-rules]] § Rule 6).
 - Steps: [[dev-sk-nsec-diagnose]].
 
 ### `secrets whoami`
 
-Shows the local identity: the recipient id, the fingerprint of the key of this machine (or "no key"), each store with the groups of this machine, and the optional NUU account. Without a login, it says "Not logged in" and ``Run `secrets login` to authenticate.`` and exits 0. No other command needs a login, and `login` is an operator command.
+Shows the local identity: the recipient id, the selected identity (`identity <name> (<reason>)`, when an identity is selected), the fingerprint of the selected key (or "no key"), each store with the groups of this machine, and the optional NUU account. When the selection is not valid, the key row says ``the identity selection is not valid (run `secrets identity list`)``. `--identity <name>` shows another identity: use it only when the operator names it. Without a login, it says "Not logged in" and ``Run `secrets login` to authenticate.`` and exits 0. No other command needs a login, and `login` is an operator command.
 
 ### `secrets keygen --public`
 
@@ -160,12 +166,34 @@ Shows the local identity: the recipient id, the fingerprint of the key of this m
 secrets keygen --public
 ```
 
-Prints the full age public key of the key file of this machine as one line on stdout. It makes no key. It never prints the private key. The CLI reads the key file for you: you never open the key file yourself.
+Prints the full age public key of the selected key file (with an identity: the key file of the identity) as one line on stdout. It makes no key. It never prints the private key. The CLI reads the key file for you: you never open the key file yourself.
 
 - When the key file has more than one identity, stdout has the first one, and stderr says: `secrets: <file> has <n> identities. This is the first one: the CLI uses it as the key of this machine.`
 - A missing, unreadable, or non-regular key file gives `✘ No usable age key: …` (exit 1).
 - An invalid identity file can give `✘ age-keygen cannot read the key file <path> (exit <n>).` or `✘ The key file <path> holds no age identity.` Both exit 1. Give the error to the operator. Do not open the file or run `age-keygen -y` yourself.
 - Only this form is for agents. `secrets keygen` with no option, `--out <file>`, and `--public --file <path>` are operator commands.
+
+### `secrets identity list`
+
+```sh
+secrets identity list [--json]
+```
+
+Lists the identities of `identities.toml`: a table `NAME`, `DEFAULT`, `PUBLIC KEY`, `KEY FILE`, `STATE`, `STORES`, then one line `active: <reason>  key file <path>` (or `active: no identity (<reason>)  key file <path>`, or `active: none (<error>)`). `STATE` is `ok` or the problem of the key file. `STORES` lists each store clone with the groups of the identity, for example `nuu-secrets (dev)`. With no identity: `No identities (<path> does not exist).` (or `has none`), the `active:` line, and on stderr the `identity add` commands for the operator. `--json` prints one object: `file`, `exists`, `default`, `active`, and `identities`.
+
+- It shows public keys and key file paths, never a private key. Do not open the key files that it names ([[dev-knw-nsec-rules]] § Rule 4).
+- `secrets identity add|use|rm` are operator commands ([Commands for the operator only](#commands-for-the-operator-only)).
+
+### `secrets project list` and `secrets project identity`
+
+```sh
+secrets project list [--json]
+secrets project identity [--mapping <path>]
+```
+
+- `project list` shows the project index: a table `NAME`, `STORE`, `IDENTITY`, `SEEN`, `STATE`, `PATH`. The states are `ok`, `missing` (the path does not exist), `linked` (the path has a symbolic link: its identity does not apply), and `duplicate` (another entry is for the same file). stderr adds one line for each kind: ``secrets: <n> path(s) are missing. When a project is gone, run `secrets project forget <path>`.``, the `duplicate` remedy (`secrets project identity <name> --mapping <path>` or `secrets project forget <path>`), and the `linked` remedy (`secrets project identity --clear --mapping <path>`). Each remedy is an operator command. `--json` prints one object.
+- `project identity` with no name and no `--clear` shows the identity of the project on this machine: `identity  <name or none>  project <project>  <path>`. With no identity, stderr says `secrets: to set one: secrets project identity <name>` (an operator command). A `secrets.toml` with a link in its path, or outside the project of the current folder, shows `identity  none`. It changes nothing.
+- `project identity <name>`, `project identity --clear`, and `project forget` are operator commands.
 
 ### `secrets store list`, `secrets store sync`, `secrets store clone`
 
@@ -281,6 +309,12 @@ Do not run these commands. The one exception is in [[dev-knw-nsec-rules]] § Rul
 | `secrets store remove <name>` | none | Removes the clone folder of a store and its entry in `stores.toml` (local state). See below. |
 | `secrets login`, `secrets logout` | `login --verbose` | The optional NUU account. |
 | `secrets push <target> --env <env>` | `--yes` (required for `--env prod`), `--mapping`, `--project`, `--store` | Sends the mapped variables of one environment to a platform. Every environment is an operator push. See below. |
+| `secrets identity add <name>` | `--key <file>` (an existing age key file; without it, a new key in `<secrets home>/keys/<name>.txt`, mode 600), `--default` | Adds an identity. A name has letters, digits, `.`, `_`, and `-`. It refuses an existing name (`IDENTITY_EXISTS`) and a key file with a passphrase. For a new key, stderr gives the admin command `secrets recipient add "<id>" <age-public-key> --groups dev`. |
+| `secrets identity use <name>` | none | Makes an identity the default. stdout: `default  <name>  key file <path>`. |
+| `secrets identity rm <name>` | none | Removes an identity from `identities.toml`. The key file stays: the CLI never deletes a key. stdout: `removed  <name>  the key file <path> stays`. |
+| `secrets project identity <name>` | `--clear`, `--mapping <path>` | Sets (or with `--clear`, removes) the identity of the project on this machine, in `projects.toml`. It refuses a `secrets.toml` that step 4 cannot use (a link in its path, a file outside the project, a file that changed during the command). It changes no project file. |
+| `secrets project forget <name\|path>` | none | Removes the entries of a project from `projects.toml`. A word with a `/`, or a word that starts with `.` or `~`, is a path. stdout: `forgot  <name>  <path>` for each entry. It changes no project file. |
+| `secrets ui` | `--identity <name>`, `--no-open`, `--idle <minutes>` | The local web page for the operator. **Agents never run it, also when the operator asks** ([[dev-knw-nsec-rules]] § Rule 11). See below. |
 
 A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks the clone and applies the change to the newest remote state. When the store changes, the CLI applies the scan rules below. It commits the exact bytes that it read and pushes the commit ([The secret scan of store commits](#the-secret-scan-of-store-commits)). It reports success only after the remote accepts the push. When nothing changes (for example `unchanged`), it makes no commit and runs no scan.
 
@@ -300,6 +334,17 @@ A write (`set`, `unset`, `edit`, `recipient add|rm`, `store fix-config`) locks t
 - `✘ The clone folder of store <name> changed during the removal. Nothing was removed.` means that a check found a changed folder.
 - After the removal, when the old working folder does not exist any more, stderr says `secrets: the old working folder <path> does not exist any more. The removal is done.` (exit 0).
 - A removal that fails late can leave a folder `.removing-<name>-<random>` in the stores folder. This folder is not routine cleanup. Agents do not delete it: report it to the operator.
+
+### `secrets ui` (operator only, never an agent)
+
+```sh
+secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
+```
+
+- It needs a terminal on stdin and stdout. Without one: `✘ secrets ui needs a terminal on stdin and stdout: the UI is for a person at a terminal. Nothing was started.` (`NO_TERMINAL`, exit 1), with the hints ``Run `secrets ui` in a terminal.`` and ``An agent does not run secrets ui. It uses `secret <cmd>`, and asks the operator to set the values.``
+- `--identity <name>` must name an identity of `identities.toml`, else `✘ There is no identity named "<name>" (--identity). Nothing was started.` (`UNKNOWN_IDENTITY`). `--idle` is a whole number of minutes, 1 to 1440 (default 15), else `✘ --idle must be a whole number of minutes (1 to 1440). Nothing was started.` (`BAD_IDLE`).
+- The server listens on `127.0.0.1` only, on a random port. The terminal shows the login link `http://127.0.0.1:<port>/#t=<token>` (one use, 60 seconds). The page then asks for an identity. The facts for the operator are in [[dev-knw-nsec-setup]] § The UI: `secrets ui`.
+- Each write of the page uses the write path of the CLI, with the same scan rules and messages ([The secret scan of store commits](#the-secret-scan-of-store-commits)). The terminal shows one line for each write and each sync, with names only. Each reveal or copy writes one line in `<secrets home>/ui-reveal.log` (never the value).
 
 ### `secrets push <target>` (operator)
 
@@ -470,10 +515,20 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 | `✘ Git does not ignore <path>. Nothing was written.` with `Next: secrets project gitignore`, or `✘ Git tracks <path>. Nothing was written.` (`NOT_IGNORED`) | `bind --local` refused: Git does not ignore `secrets.local.toml`, or tracks it. | Run `secrets project gitignore`. For a tracked file, run `git rm --cached secrets.local.toml` and tell the operator: the Git history keeps the old file. |
 | `✘ <n> [env] entry has <t> in to: <VAR>, …. Nothing was written.` (`TARGET_IN_USE`) | `target rm` while entries still use the target. | Remove the target from each entry with `bind` (the same name, the other targets) only when the operator or the task says so. |
 | `✘ <VAR> is not in [env] of <path>. Nothing was written.` (`NO_ENTRY`) | `unbind` of a variable with no entry. | Check the name with `secrets vars`. |
+| `✘ <path> is a symbolic link now, …` or `✘ <path> goes through the symbolic link <link> now, and projects.toml has the identity <name> for that path. …` (`LINKED_MAPPING`) | The path of the `secrets.toml` has a link, and the project index has an identity for that path. The CLI uses neither that identity nor the default. Nothing was read. | Stop. Give the operator the message and its remedy lines ([[dev-knw-nsec-rules]] § Rule 12). |
+| `✘ The CLI cannot prove that <path> is the secrets.toml that it read: the file changed during the command. …` (`MAPPING_CHANGED`) | The file or its path changed during the command, and its entry has an identity. Nothing was read. | Stop. Give the operator the message and its remedy lines. |
+| `✘ <path> is outside the project of the current folder (<boundary>). The identity <name> of that secrets.toml in projects.toml applies only in its own project …` (`OUTSIDE_PROJECT`) | The search found the `secrets.toml` of another project above the Git repository of the current folder. Nothing was read. | Stop. Give the operator the message and its remedy lines. Do not change the folder or `--mapping` to pass the check. |
+| `✘ projects.toml has <n> entries for one secrets.toml (<path>), with different identities:` with one line for each entry (`DUPLICATE_PROJECT`) | An index of an earlier version has two entries of one file. Nothing was read. | Stop. Give the operator the message and its remedy lines (`secrets project identity <name> --mapping <path>`, `secrets project forget <path>`, or `--identity <name>`). |
+| `✘ There is no identity named "<name>" (<where>).` (`UNKNOWN_IDENTITY`) with `Next: secrets identity list` | `--identity`, `SECRETS_IDENTITY`, the project identity, or the default names an identity that `identities.toml` does not have. `<where>` names the source. | Stop. Run `secrets identity list`, and give the operator both outputs. |
+| `✘ The CLI cannot read the identity of project <name>: …` (`PROJECT_INDEX`) | `projects.toml` is not valid or not a regular file. | Stop. Run `secrets project list`, and give the operator both outputs. Do not edit `projects.toml`. |
+| `secrets: warning: <path> has no identity of its own in projects.toml, so the CLI uses <identity or key file>. The secrets.toml above it in the same project, <path> (project <name>), has the identity <name>. …` | The nearest `secrets.toml` has no project identity, but a `secrets.toml` above it has one. The command did not stop: it used the default. | After the command, stop and give the operator the warning ([[dev-knw-nsec-rules]] § Rule 12). |
+| `secrets: warning: …, so the identity <name> of its target <path> in projects.toml does not apply (a link can name the secrets.toml of another project). …` | The path of the `secrets.toml` has a link. The command did not use the identity of the link target. | After the command, stop and give the operator the warning. |
+| `secrets: warning: <path> has an identity key, and the CLI ignores it: a project file never selects an identity. …` | `secrets.local.toml` has an `identity` key. | Report it. The operator sets the project identity and removes the line. |
+| `✘ secrets ui needs a terminal on stdin and stdout: the UI is for a person at a terminal. Nothing was started.` (`NO_TERMINAL`) | An agent ran `secrets ui`. | Never run it again, and never give it a terminal. Use `secret <cmd>`, and ask the operator for the values ([[dev-sk-nsec-request_value]]). |
 
 ## Known limits
 
-These limits are in the current build (`secrets` canon `471e270`, npm `0.1.0-beta.1`).
+These limits are in the current build (the CLI of Mission 002 on `even-macbook`, not yet on canon; items 1 to 22 also apply to canon `471e270` and npm `0.1.0-beta.1`).
 
 1. **The `dotenv` npm reader loses `__proto__`.** The `dotenv` package loses a variable named `__proto__` when it reads text. `secrets export --format dotenv` warns on stderr and still prints the variable. Do not name a variable `__proto__`. When a program needs one, use `--format json`, `--format shell`, or `secret <cmd>`.
 2. **The secret check of literals is not complete.** `bind` and `doctor` find a known key prefix (for example `sk_live_`), a key block, a JWT, a URL with a password, a high-entropy string of 24 or more characters, and a random token of 16 to 23 letters and digits of one letter case. In the tests of the CLI, the check found about 94% of random base36 tokens and 99.5% of random hex tokens of that length. It misses tokens with few changes between letters and digits (for example 15 letters and 1 digit) and mixed-case tokens shorter than 24 characters. A UUID and a 40-character lowercase hex string (the form of a Git commit SHA) pass, except when a word of the variable name is `SECRET`, `SECRETS`, `TOKEN`, `TOKENS`, `PASSWORD`, `PASSWD`, `PRIVATE`, `CREDENTIAL`, `CREDENTIALS`, `KEY`, `KEYS`, `APIKEY`, or `SALT`. The CLI splits the name into words at `_` and at other characters that are not letters or digits. A camelCase name such as `apiToken` is one word, so a UUID passes there. Do not rely on the check: when a value can be secret, it is not a literal.
@@ -497,3 +552,8 @@ These limits are in the current build (`secrets` canon `471e270`, npm `0.1.0-bet
 20. **A deleted recovery key file can stay on the disk.** On an SSD or a copy-on-write file system, a deleted file can stay readable. The paper is the recovery key.
 21. **The store URL forms are strict.** The CLI refuses, and does not show, each store URL that is not a usual form ([[dev-knw-nsec-setup]] § Store URL forms), also some forms that Git accepts, for example `ssh://git@my_host/x` (a `_` in a URL host) or a path with `?` or `#`. A hint for an SSH URL with a user name shows `***@`, so that hint command is not usable as it is.
 22. **`secrets setup --print | head` ends with an error.** When the reader of stdout closes early, the command ends with an `EPIPE` error and exit 1. This is also true for `doctor`.
+23. **An identity is not a security boundary.** Each program of one operating-system user can read each key file of that user and can change `identities.toml` and `projects.toml`. For a boundary, the operator uses another operating-system user or another machine.
+24. **`SOPS_AGE_KEY_FILE` has no isolation.** Step 3 of the key selection keeps the old behavior: SOPS can also use its other key sources. Only a named identity (steps 1, 2, 4, and 5) gets its key file alone.
+25. **A folder link in a cloned repository.** When the shell is in a folder link, the operating system gives the CLI the physical folder, so the CLI uses the `secrets.toml` and the identity of the target. But a child process of `secret <cmd>` gets the logical `PWD` of the shell. Run `secret <cmd>` from the real folder of the project.
+26. **A key file with a passphrase is not supported.** `secrets identity add --key` refuses it.
+27. **Non-Git projects.** The project boundary of a folder with no Git repository is the current folder. In a subfolder of such a project, the `secrets.toml` above is outside that boundary: when its entry has an identity, the command stops (`OUTSIDE_PROJECT`). The operator runs the command in the folder of the `secrets.toml`, or uses `--mapping`.

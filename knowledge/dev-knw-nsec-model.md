@@ -1,5 +1,5 @@
 ---
-description: "The store model and the project mapping: store files and groups, secret names, secret:// references, secrets.toml and secrets.local.toml entries, targets, literals, the environment chain, and what goes in the store"
+description: "The store model and the project mapping: store files and groups, identities and the key selection order, the project index, secret names, secret:// references, secrets.toml and secrets.local.toml entries, targets, literals, the environment chain, and what goes in the store"
 ---
 
 # Knowledge: Store Model and Project Mapping
@@ -24,7 +24,7 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 - SOPS encrypts each value with the data key of its file. The data key is encrypted for each recipient of the group of the file.
 - A recipient is the age key of one machine, with an id `<Name>@<machine>` and a list of groups. A machine opens only the files of its groups.
 - The recovery key is an age key on paper. It is a recipient of all groups.
-- The CLI keeps the store clones in the secrets home: `$SECRETS_HOME`, else `<NUU home>/secrets/` for the prod build and `<NUU home>/secrets-dev/` for the dev build. The NUU home is `$NUU_HOME`, else `~/.nuucognition`. The list of clones is `<secrets home>/stores.toml`.
+- The CLI keeps the store clones in the secrets home: `$SECRETS_HOME`, else `<NUU home>/secrets/` for the prod build and `<NUU home>/secrets-dev/` for the dev build. The NUU home is `$NUU_HOME`, else `~/.nuucognition`. The list of clones is `<secrets home>/stores.toml`. The secrets home also holds `identities.toml` (the identities), `projects.toml` (the project index), `keys/` (the new keys of `secrets identity add`), and `ui-reveal.log` (the reveal log of `secrets ui`).
 - The secrets home and its ancestors can be symbolic links. Commands that check a managed clone refuse linked `stores/`, clone, or `.git` folders below the real secrets home. Not every metadata command runs that check. A successful `whoami` is not proof that these folders passed it. Use plain `secrets doctor` to check the clone.
 - Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, and each `*.enc.yaml`. The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once. A file or a folder that the CLI cannot check (an `lstat` error other than a missing path) is never treated as missing: the command stops.
 - The SOPS metadata of each store file (`version`, `lastmodified`, `mac`, the `age` entries, and `encrypted_regex`) must have the form that SOPS writes. A store write stops on a field in another form (`UNSAFE_STORE` before the write, `UNSAFE_RESULT` after a SOPS write). The message names the field, never its value.
@@ -33,6 +33,38 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 - Before a store commit, the CLI scans the exact bytes of the change unless gitleaks is missing or `SECRETS_GITLEAKS=0`. No Git hook runs in the store clone. The scan does not cover a manual commit in another checkout, so the team changes the store only through `secrets`. See [[dev-knw-nsec-cli]] § The secret scan of store commits and [[dev-knw-nsec-rules]] § Rule 10.
 
 You never open these files. The CLI reads them for you. See [[dev-knw-nsec-rules]] § Rule 4.
+
+## Identities and the key selection
+
+An identity is a name for one age key file of this machine. For example, `work` is the key that opens the store of the team, and `client` is the key of the store of a client. The identities are in `identities.toml` in the secrets home. The file holds names and key file paths, never a key. A new key of `secrets identity add <name>` goes to `<secrets home>/keys/<name>.txt` (mode 600).
+
+**The selection order.** For each command that decrypts or reads the key, the CLI selects one key file. The first match wins:
+
+1. `--identity <name>` (on each command that decrypts, and on `doctor`, `setup`, `keygen`, `whoami`, and `store init|clone`).
+2. The variable `SECRETS_IDENTITY`.
+3. The variable `SOPS_AGE_KEY_FILE` (a key file, not an identity).
+4. The identity of the project in `projects.toml` of this machine (set with `secrets project identity <name>`).
+5. `default` in `identities.toml`.
+6. The default key file `~/.config/sops/age/keys.txt`.
+
+- Steps 4 and 5 need `identities.toml`. With no `identities.toml`, the CLI selects `SOPS_AGE_KEY_FILE`, else the default key file, as before.
+- `secrets doctor` shows the step that selected the key: `key selection: <reason>`. `secrets whoami` shows `identity <name> (<reason>)`. `secrets identity list` ends with `active: <reason>  key file <path>`.
+- **A named identity gets only its key file.** With an identity (steps 1, 2, 4, and 5), each SOPS process gets the key file of the identity and no other key source: no `SOPS_*` variable of the shell and no default age or SSH key. So an identity opens only the store files of its groups. A missing key file of an identity is an error, also when SOPS has another key source.
+- **A project file never selects an identity.** The identity of a project is in `projects.toml` of the machine, not in `secrets.toml` or `secrets.local.toml`. The CLI ignores an `identity` key in `secrets.local.toml` and prints one warning. So a cloned project cannot select an identity.
+- **Where step 4 applies.** The project identity applies only to the `secrets.toml` of the project that you are in: a path with no symbolic link, inside the project boundary of the current folder (the top level of its Git repository, else the current folder), and the same file at the read and at the lookup. Else the command stops when the entry has an identity (`LINKED_MAPPING`, `OUTSIDE_PROJECT`, `MAPPING_CHANGED`), because the default can have more access. Two old entries of one file with different identities also stop the command (`DUPLICATE_PROJECT`).
+- **The parent warning.** When step 4 gives no identity for the nearest `secrets.toml`, and a `secrets.toml` above it in the same project has an identity, the CLI prints one warning and does not stop. The command then uses the default identity (or the default key file).
+- **The least access is the default.** The README of the CLI advises the operator to make the identity with the least access the default. Then a project identity gives more access only in the projects where the operator set it.
+- **Not a security boundary.** Each process of one operating-system user can read each key file of that user and can change `identities.toml` and `projects.toml`.
+
+The agent rules for identities are in [[dev-knw-nsec-rules]] § Rule 12. The setup for the operator is in [[dev-knw-nsec-setup]] § Identities.
+
+## The project index
+
+`projects.toml` in the secrets home lists the projects of this machine. Each command that loads a `secrets.toml` adds or updates its entry (`secrets setup --print` does not). A command that decrypts records the project only after its key check.
+
+- An entry has the path of the `secrets.toml`, the project name, the store name, the project identity (step 4), and the last time that a command loaded the file. It holds no value.
+- `secrets project list` shows each entry with a state: `ok`, `missing` (the path does not exist), `linked` (the path has a symbolic link: its identity does not apply), or `duplicate` (another entry is for the same file, for example another letter case or Unicode form of the path on macOS).
+- `secrets project forget <name|path>` removes the entries of a project. It changes no project file. It is an operator command ([[dev-knw-nsec-rules]] § Rule 5): an entry can hold the project identity.
 
 ## Secret names
 

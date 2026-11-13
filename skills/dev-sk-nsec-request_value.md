@@ -1,5 +1,5 @@
 ---
-description: "Ask the operator for a missing value or key the right way: the variable, the secret name, the environment, and the exact command for the operator's own terminal; never a value in the chat"
+description: "Ask the operator for a missing value or key the right way: the variable, the secret name, the environment, and the exact command for the operator's own terminal (secrets set) or the page of secrets ui; then continue with secret <cmd>; never a value in the chat"
 ---
 
 > [!important] THIS FILE IS AN INSTRUCTION. WHEN REFERENCED IT IS MEANT TO BE TAKEN AS AN ACTION.
@@ -40,13 +40,18 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    - <VAR> → <name>, env <env>
    - (one line for each value)
 
-   In your own terminal, in the project folder, run each command and type the value at the hidden prompt:
-     secrets set <name> --env <env>
+   Use one of these two ways:
+   a) In your own terminal, in the project folder, run each command and type the value at the hidden prompt:
+        secrets set <name> --env <env>
+   b) In your own terminal, run `secrets ui`. Choose an identity that opens env <env>. Open the project <project>, select env <env>, and set each value in the page. A change to prod or deploy needs the typed environment name.
 
-   Do not send me the values. Tell me when each command reports "set" or "unchanged".
+   Do not send me the values, and do not send me the login link of secrets ui. Tell me when each value is set (secrets set reports "set" or "unchanged").
    If the command stops or warns, report its exit status. Copy the fixed write-error text, safe rule labels, safe file labels, and cleanup warnings. Do not copy file content or raw tool output. Some error lines show a path that you chose or set. Do not send a line if a path or another field contains a value. Instead, tell me which kind of error occurred.
    ```
 
+   - You never run `secrets ui` yourself, and you never open its page or its login link ([[dev-knw-nsec-rules]] § Rule 11). Way (b) is for the operator only. The page needs an identity in `identities.toml`: with no identity, the page shows its first setup. Way (a) works on each machine.
+   - The page writes with the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. It shows a write error with a fixed text. Read the text that the operator sends with [[dev-sk-nsec-diagnose]].
+   - `secrets set` uses the identity that the CLI selects for the operator's shell ([[dev-knw-nsec-model]] § Identities and the key selection). Do not add `--identity` to the command unless the operator names the identity.
    - Outside the project folder, the operator adds `--store <local store name>` or `--mapping <path>` to the command.
    - A successful `secrets set` prints `set  <name>  env <env>  store <store> @ <revision>`, or `unchanged  …` when the store already has that value. Both exit 0. Neither shows a value.
    - Before the commit, `secrets set` runs the secret scan. It can stop with `✘ The secret scan (gitleaks) …`, or print the warning `secrets: gitleaks is not on PATH, …`. Read the text that the operator sends with [[dev-sk-nsec-diagnose]] (step 9).
@@ -88,7 +93,8 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    ```
 
    - Give the groups that the task needs: `dev` for development values, `prod` and `deploy` only when the operator decides.
-   - The key file is `$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`. The `doctor` Key section shows the path.
+   - The key file is the key file that the CLI selects ([[dev-knw-nsec-model]] § Identities and the key selection). The `doctor` Key section shows the selection (`key selection: …`) and the path. `secrets keygen --public` prints the public key of that key file: with an identity, the key of the identity.
+   - When the selected key file is the key file of an identity, and it is missing or cannot be used (`doctor`: ``→ run `secrets identity list` to check the key file of the identity <name>``), do not use step 1a. Report the `doctor` line and the identity row of `secrets identity list` (the name, the key file path, and its state). The operator repairs the identity with the commands of [[dev-knw-nsec-setup]] § Identities. You never run these commands ([[dev-knw-nsec-rules]] § Rule 12).
    - When the key is in another file, the operator can set `SOPS_AGE_KEY_FILE` to that file in place of step 1a.
    - On a new machine, the operator can also run `secrets setup` in their own terminal and pick "join a store of your team". It makes the key, shows the id, the public key, the fingerprint, and the exact admin command, and clones the store when the admin has added the machine ([[dev-knw-nsec-setup]] § A new machine for a store).
    - After the admin adds the key, run step 4 yourself. Its plain doctor must run before clone or sync. Then run `secrets doctor --online` with the same mapping and store options.
@@ -99,10 +105,12 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    - do not repeat it and do not use it;
    - tell the operator that the value is now in the session transcript;
    - follow [[dev-knw-nsec-rules]] § If a value leaks (the operator replaces the value at its provider).
-7. **Check the result.** After the operator acts, run plain `secrets doctor` with the task's mapping, store, and environment options. Keep the lines about local changes, unpushed commits, and links. Then run `secrets doctor --online` with the same options, or run `secret <cmd>` again. The cached clone can be older than a remote change. A successful write on this machine already updates its clone. The `fail` lines for these names must be gone.
+7. **Check the result.** After the operator acts (with `secrets set` or in `secrets ui`), run plain `secrets doctor` with the task's mapping, store, and environment options. Keep the lines about local changes, unpushed commits, and links. Then run `secrets doctor --online` with the same options, or run `secret <cmd>` again. The cached clone can be older than a remote change. A successful write on this machine already updates its clone. The `fail` lines for these names must be gone.
+8. **Continue the task.** Run the program with `secret <cmd>` ([[dev-sk-nsec-run_app]]). Do not read the values from the UI or from `secrets export` to check them.
 
 # Output
 
 - One request to the operator with each missing value or key, the reason, and the exact commands
 - No value in the request, in your context, or in a file
 - After the operator acts: a `secrets doctor` result or a `secret <cmd>` run without the missing values
+- Never a `secrets ui` run, a page read, or an open of its login link by you

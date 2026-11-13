@@ -1,5 +1,5 @@
 ---
-description: "The setup of NUU Secrets for an operator: the install, Git access, the guided setup secrets setup and setup --print, a new store for a new team, a new machine for a store, a project, the accepted store URL forms, and which steps an agent can do"
+description: "The setup of NUU Secrets for an operator: the install, Git access, the guided setup secrets setup and setup --print, a new store for a new team, a new machine for a store, a project, identities (the least access as the default), the project index, the local web page secrets ui (operator only), the accepted store URL forms, and which steps an agent can do"
 ---
 
 # Knowledge: The Setup for an Operator
@@ -20,7 +20,11 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 | The mapping of a project | Agent or operator | `secrets init-project`, `secrets vars`, `secrets bind`, `secrets unbind`, `secrets project gitignore` |
 | The platform targets | Agent with the ids from the operator | `secrets target set`, `secrets target rm` |
 | The store URL of a project | Agent with the URL from the operator | `secrets project set --store <url>` |
-| The values | Operator | `secrets set <name> --env <env>` |
+| The values | Operator | `secrets set <name> --env <env>`, or the page of `secrets ui` |
+| The identities of this machine | Operator | `secrets identity add\|use\|rm`, `secrets project identity <name>` (or `--clear`) |
+| Show the identities and the project index | Agent or operator | `secrets identity list`, `secrets project list`, `secrets project identity` |
+| Remove a project from the project index | Operator | `secrets project forget <name\|path>` |
+| The local web page | Operator only (never an agent) | `secrets ui` |
 | Check | Agent or operator | `secrets doctor` |
 
 ## Before the setup
@@ -121,7 +125,63 @@ secrets target set vercel --project <name-or-id>      # only with the ids from t
 secrets doctor --env dev
 ```
 
-The operator then writes the missing values with `secrets set`.
+The operator then writes the missing values with `secrets set`, or in the page of `secrets ui`.
+
+## Identities
+
+An identity is a name for one age key file of this machine ([[dev-knw-nsec-model]] § Identities and the key selection). Use identities when one machine needs more than one key: for example `work` for the store of the team and `client` for the store of a client. With no `identities.toml`, the CLI works as before: `SOPS_AGE_KEY_FILE`, else the default key file. Each command of this section is an operator command, except `identity list` and `project identity` with no name and no `--clear` ([[dev-knw-nsec-rules]] § Rule 12).
+
+```sh
+secrets identity add work --key ~/.config/sops/age/keys.txt   # an existing key file
+secrets identity add client --key ~/.config/sops/age/client.txt
+secrets identity add test                 # a new key in <secrets home>/keys/test.txt (mode 600)
+secrets identity use work                 # the default identity (or: identity add … --default)
+secrets identity list [--json]            # the public key, the key file and its state, the default, the stores and groups, the active line
+secrets identity rm test                  # the key file stays: the CLI never deletes a key
+secrets project identity client           # the identity of the project of the current folder, on this machine
+secrets project identity                  # shows it
+secrets project identity --clear          # removes it: the default applies again
+secret --identity work pnpm dev           # the identity for one command
+```
+
+- **Make the identity with the least access the default.** Then a project identity gives more access only in the projects where you set it. In the other direction, each folder where the project identity does not apply gets the default: a new clone, a project with no identity, and a new `secrets.toml` in a subfolder of a project (for example from a `git pull`). For the last case, the CLI prints one warning, but the command does not stop.
+- **A new key of `identity add <name>`** is a new recipient. The CLI prints the admin command (`secrets recipient add "<id>" <age-public-key> --groups dev`). The admin compares the fingerprint through a second channel, as for a new machine ([A new machine for a store](#a-new-machine-for-a-store)).
+- **The project identity is a fact of this machine.** It is in `projects.toml`, never in a project file. `secrets project identity <name>` refuses a `secrets.toml` with a symbolic link in its path, a file outside the project of the current folder, and a file that changed during the command. The name must be in `identities.toml`.
+- **The variables.** `SECRETS_IDENTITY=<name>` selects an identity for each command of a shell. `SOPS_AGE_KEY_FILE` selects a key file, not an identity, and wins over the project identity and the default. `secrets project identity` and `secrets identity use` print a note when one of them is set in the shell.
+- **The checks.** `secrets doctor` shows `key selection: …` (the step that selected the key). `secrets whoami` shows the identity.
+- **Limits.** An identity is not a boundary between people: each program of one operating-system user can read each key file of that user. For a boundary, use another operating-system user or another machine. A key file with a passphrase (`age -p`) is not supported: `identity add --key` refuses it. Run `secret <cmd>` from the real folder of the project, not through a folder link of a cloned repository.
+
+When a command stops on an identity problem (`LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, `UNKNOWN_IDENTITY`), the error lines give the remedy: for example `secrets project identity <name> --mapping <path>` (or `--clear`), `secrets project forget <path>`, `--identity <name>` for one command, or a path with no link. The operator selects the remedy.
+
+## The project index
+
+`projects.toml` in the secrets home lists the projects of this machine ([[dev-knw-nsec-model]] § The project index). Each command that loads a `secrets.toml` records its project. Nobody edits the file by hand.
+
+```sh
+secrets project list [--json]             # NAME, STORE, IDENTITY, SEEN, STATE, PATH
+secrets project forget my-app             # a project name
+secrets project forget ./apps/web         # a path: a secrets.toml or its folder (a word with "/", or that starts with "." or "~")
+```
+
+- The states are `ok`, `missing` (the path does not exist), `linked` (the path has a symbolic link: its identity does not apply), and `duplicate` (another entry is for the same file). stderr adds the remedy for each kind.
+- `secrets doctor` has a section `Projects (projects.toml)`. It warns for each missing path (`→ when the project is gone, run secrets project forget <path>`) and for each duplicate entry (`→ run secrets project identity <name> --mapping <path> (or --clear): it makes the entries one entry`). It removes nothing.
+- `forget` removes all entries of one file. The path of a link removes only the entry of the link, never the entry of its target. When a word is a project name and also a relative path of another entry, `forget` refuses and removes nothing. An agent does not run `forget`: an entry can hold the project identity.
+
+## The UI: `secrets ui`
+
+`secrets ui` starts a local web page for the operator. The page shows the stores, the projects of this machine, and the names of each project and each environment. A value stays hidden until the operator reveals it. Agents never run `secrets ui` and never read values from it ([[dev-knw-nsec-rules]] § Rule 11). You can tell the operator about it, for example to set the missing values.
+
+```sh
+secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
+```
+
+- **Start.** The operator runs `secrets ui` in a terminal. With no terminal on stdin and stdout, it refuses and starts nothing (`NO_TERMINAL`). The server listens on `127.0.0.1` only, on a random port. The terminal shows one URL: `http://127.0.0.1:<port>/#t=<token>`. Use this `127.0.0.1` URL, not `localhost`: the server accepts no other host name.
+- **The login link.** The token works one time, in the first 60 seconds. The CLI opens the browser with a launch file (mode 600), so the token is in no process argument. With `--no-open`, the operator opens the URL. For a new link, the operator stops `secrets ui` and runs it again. The link is a credential: never send it in a chat or a message.
+- **The identity choice.** After the login, the page asks for an identity of `identities.toml` (`--identity <name>` selects it in advance). The page then reads and writes with the key file of that identity only: no `SOPS_AGE_KEY_FILE`, no `SECRETS_IDENTITY`, and no project identity applies. When `identities.toml` no longer names that key file for the identity, the page locks. With no identity on this machine, the page shows its first setup: it makes the first identity (the default) with a new key or an existing key file.
+- **The lock.** The page locks after 15 minutes with no request (`--idle <minutes>`, 1 to 1440), and when the operator clicks Lock. To unlock, the operator chooses the identity again. The lock and Quit delete the Undo records of the server.
+- **The hidden values.** A list never holds a value. The page shows 8 dots for a hidden value. A reveal gives one value and hides it again after 30 seconds, on blur, and on a change of the selection. Copy works without a reveal, and the page clears the clipboard after 30 seconds when it can. The page compares values ("same as dev") with no reveal. Before each reveal or copy, the server writes one line in `<secrets home>/ui-reveal.log`: the time, the identity, the store, the environment, the name, and show or copy, never the value.
+- **Writes.** Each write of the page uses the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. A write to `prod` or `deploy` needs the typed environment name. An import makes one store commit for each environment. The page changes `secrets.toml`, `secrets.local.toml`, and `.gitignore` with the code of the setup commands; it does not commit the project repository. The terminal shows one line for each write and each sync, with names only.
+- **Quit.** Ctrl-C in the terminal, Quit in the page, and a closed terminal stop the server.
 
 ## Store URL forms
 
