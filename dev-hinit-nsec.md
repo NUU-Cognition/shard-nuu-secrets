@@ -18,13 +18,14 @@ The complete rules are in [[dev-knw-nsec-rules]].
 1. Never print, log, echo, or type a value. This includes your result, an Orbh message, an update, the `blockers` key, a Mesh note, a commit message, and a test fixture.
 2. Never write a value to a file. Never pass a value as a process argument.
 3. Never read or copy the key file. Never decrypt or edit a store file. `secrets keygen --public` (with no `--file`) gives you the public key of this machine.
-4. Never run an operator-only command (`secrets set`, `edit`, `unset`, `keygen` except `keygen --public` with no `--file`, `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, `logout`). The one exception: your prompt relays an instruction of the operator that names that exact command. Never add `--yes` to a push.
+4. Never run an operator-only command (`secrets setup` except `setup --print`, `set`, `edit`, `unset`, `keygen` except `keygen --public` with no `--file`, `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, `logout`). The one exception: your prompt relays an instruction of the operator that names that exact command. Never add `--yes` to a push.
 5. Never set `SECRETS_GITLEAKS=0`, and never remove, rename, or hide gitleaks on `PATH`. Before a store write that this shard allows, check for an inherited `SECRETS_GITLEAKS=0`. See [[dev-knw-nsec-rules]] § Rule 10.
 6. You are a user. The rules prevent accidents. They are not a security boundary.
+7. Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` only with the commands of the CLI (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), not by hand. Write a target table or change the store URL only with the ids or the URL that your prompt gives for the operator.
 
 ## What Is Different in a Headless Session
 
-1. **No interactive prompt.** Never start a command that waits for a person: `secrets set` (a hidden prompt), `secrets edit` (an editor), or `secrets login` (a browser). These are operator commands.
+1. **No interactive prompt.** Never start a command that waits for a person: `secrets setup` (a guided setup on a terminal), `secrets set` (a hidden prompt), `secrets edit` (an editor), or `secrets login` (a browser). These are operator commands. `secrets setup --print` waits for nothing: use it to find the setup steps that remain, and put the operator commands of each `todo` step in your blocker ([[dev-knw-nsec-setup]]).
 2. **A blocker goes to a person, never to a guess.** These are blockers:
    - the shell cannot find `secrets` or `secret` (`command not found`): the operator installs the CLI with `npm install -g @nuucognition/secrets-cli@beta` ([[dev-knw-nsec-cli]] § Install). Do not install it, and do not run it with `npx`;
    - a value is missing (`✘ <n> variable(s) have no value in env <env> …`, or a `doctor` line `… is not in the store`);
@@ -88,6 +89,7 @@ flint orbh session set blockers "clerk/secret-key (dev): no value in the store"
 |---|---|
 | Run an app, a test, or a script with its secrets | [[dev-sk-nsec-run_app]] |
 | A project has no `secrets.toml`, or a variable has no entry | [[dev-sk-nsec-setup_project]] |
+| This machine has no key or no store yet (a new team or a new machine) | `secrets setup --print`, then [[dev-knw-nsec-setup]]; return with the operator commands as a blocker |
 | `secret` or `secrets` fails, or access is not correct | [[dev-sk-nsec-diagnose]] |
 | A value or a key is missing | [[dev-sk-nsec-request_value]], then return with the blocker |
 | Prepare a push to Vercel, Convex, or Railway | [[dev-sk-nsec-plan_push]], then return with the commands for the operator |

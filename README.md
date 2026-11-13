@@ -16,6 +16,8 @@ npm install -g @nuucognition/secrets-cli@beta    # the commands secrets and secr
 
 SOPS, age, and Git are also necessary. gitleaks is optional. `secrets doctor` checks each tool. See `knowledge/dev-knw-nsec-cli.md` § Install.
 
+Then the operator runs `secrets setup` on a terminal: the guided setup of the key, the store (a new store, or join a store of the team), and the project. Each step is also a plain command. The operator guide is `knowledge/dev-knw-nsec-setup.md`.
+
 ## Structure
 
 - `shard.yaml` — the manifest. It depends on `@nuucognition/flint` `^0` (each `0.x` version: the published core `0.3.x` and `0.4.x`). No types, folders, setup, or install files.
@@ -23,6 +25,7 @@ SOPS, age, and Git are also necessary. gitleaks is optional. `secrets doctor` ch
 - `dev-hinit-nsec.md` — the headless init for Orbh sessions: the same rules, no interactive prompts, and blockers to the dispatcher or the operator.
 - `knowledge/dev-knw-nsec-rules.md` — the complete agent rules (the required reading).
 - `knowledge/dev-knw-nsec-cli.md` — the install, the commands, the options, the output rules, the exit statuses, the messages, the secret scan of store commits, and the known limits.
+- `knowledge/dev-knw-nsec-setup.md` — the setup for an operator: the guided setup `secrets setup` and `setup --print`, a new store, a new machine, a project, the store URL forms, and which steps an agent can do.
 - `knowledge/dev-knw-nsec-model.md` — the store model, secret names, `secrets.toml`, `secrets.local.toml`, literals, and the environment chain.
 - `skills/dev-sk-nsec-run_app.md` — run a program with its secrets.
 - `skills/dev-sk-nsec-setup_project.md` — write the mapping of a project.
@@ -45,4 +48,4 @@ Edit the files of this folder. Then build the shard again:
 flint shard build nuu-secrets
 ```
 
-The command facts come from the `secrets` CLI at canon `35ecaba` (`secrets --help` and the README of `NUU-Cognition/secrets`). The npm version `0.1.0-beta.0` of `@nuucognition/secrets-cli` has the same code. When the CLI changes, check each command, option, and message of the knowledge files and the skills again.
+The command facts come from the `secrets` CLI at canon `471e270` (`secrets --help` and the README of `NUU-Cognition/secrets`, which is also on the npm page). The npm version `0.1.0-beta.1` of `@nuucognition/secrets-cli` has the same code. When the CLI changes, check each command, option, and message of the knowledge files and the skills again.

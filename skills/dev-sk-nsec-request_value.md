@@ -90,6 +90,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    - Give the groups that the task needs: `dev` for development values, `prod` and `deploy` only when the operator decides.
    - The key file is `$SOPS_AGE_KEY_FILE`, else `~/.config/sops/age/keys.txt`. The `doctor` Key section shows the path.
    - When the key is in another file, the operator can set `SOPS_AGE_KEY_FILE` to that file in place of step 1a.
+   - On a new machine, the operator can also run `secrets setup` in their own terminal and pick "join a store of your team". It makes the key, shows the id, the public key, the fingerprint, and the exact admin command, and clones the store when the admin has added the machine ([[dev-knw-nsec-setup]] § A new machine for a store).
    - After the admin adds the key, run step 4 yourself. Its plain doctor must run before clone or sync. Then run `secrets doctor --online` with the same mapping and store options.
 5. **Send the request.**
    - In an interactive session, write it in your reply and wait for the operator.

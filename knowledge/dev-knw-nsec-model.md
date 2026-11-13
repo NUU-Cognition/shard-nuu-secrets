@@ -126,7 +126,8 @@ environments = { prod = "production" }   # store environment → Railway environ
 - It can hold only an `[env]` table. Each entry can target only `local`.
 - For the `local` target, its entries replace the entries of `secrets.toml` with the same variable.
 - `secrets export --to <platform target>` does not use its entries in the output. But the CLI still reads and checks the file: a `secrets.local.toml` that is not valid stops that export too (exit 1).
-- `secrets bind` writes only `secrets.toml`. When `secrets.local.toml` has the same variable, `bind` writes a notice on stderr: the local entry wins on this machine.
+- `secrets bind` writes `secrets.toml`. When `secrets.local.toml` has the same variable, `bind` writes a notice on stderr: the local entry wins on this machine.
+- `secrets bind … --local` writes an entry to `secrets.local.toml` (it makes the file when it is missing), and `secrets unbind <VAR> --local` removes one. `bind --local` refuses when Git does not ignore the file or tracks it. Do not edit the file by hand.
 
 ## Literals
 

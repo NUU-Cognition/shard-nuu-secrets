@@ -1,5 +1,5 @@
 ---
-description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; the operator-only commands; how to ask for a value; the secret scan of store commits; what to do after a leak"
+description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup); how to ask for a value; the secret scan of store commits; what to do after a leak"
 ---
 
 # Knowledge: Agent Rules
@@ -78,6 +78,7 @@ Other processes can read the arguments of a process. A program must read a value
 - Do not read or print the variable `SOPS_AGE_KEY`: it can hold a private key. Do not run the command of `SOPS_AGE_KEY_CMD`.
 - Do not decrypt a store file. Do not run `sops` on a store file. An error of `secret` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
 - Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, or `stores.toml` by hand.
+- Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` with the commands of Rule 6 (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), not by hand. These commands check the result and refuse a bad change. When a command cannot edit an unusual form of the file (`MAPPING_EDIT`), report it to the operator.
 - Do not run Git commands in a store clone, and do not delete a store clone. Do not delete a `.removing-*` folder in the stores folder: report it to the operator. To refresh a store clone, first run plain `secrets doctor` for that store (Rule 6). Then run `secrets store sync <name>`, or `secrets doctor --online` with the same options.
 - Do not move, link, or replace folders in the secrets home. Managed-clone checks refuse linked folders below the real secrets home. Store-file checks refuse non-regular files. Both refuse a file or a folder that they cannot check (`… cannot check …`, `… cannot be checked (<code>)`). Not every metadata command runs every check. Report each refusal to the operator. Do not change modes to pass a check.
 
@@ -87,6 +88,7 @@ The operator enters values and manages keys. Do not run these commands. The one 
 
 | Command | What it does |
 |---|---|
+| `secrets setup` (without `--print`) | The guided setup on a terminal. It makes keys and stores and writes values ([[dev-knw-nsec-setup]]). `secrets setup --print` is not on this list (see Rule 6). |
 | `secrets set` | Writes a value. The value comes from a hidden prompt or stdin. |
 | `secrets edit` | Shows the values of one store file in an editor. For preview, it shows only the preview file. |
 | `secrets unset` | Removes a value. |
@@ -118,7 +120,12 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 | `secrets store list` | List the store clones of this machine (no values). |
 | `secrets store sync <name>` | Refresh one store clone that a plain `secrets doctor` checked first. Always name the store. |
 | `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secret` without `--offline` clones the store when necessary. |
-| `secrets init-project`, `secrets bind` | Write `secrets.toml`: names and targets, no values. See [[dev-sk-nsec-setup_project]]. |
+| `secrets setup --print` | Show the state of each setup step and the commands that remain. It changes nothing. See [[dev-knw-nsec-setup]]. |
+| `secrets vars` | List the variable names that the code reads, and their mapping state. Names and paths only. |
+| `secrets init-project`, `secrets bind`, `secrets unbind` | Write `secrets.toml` (or, with `--local`, `secrets.local.toml`): names and targets, no values. `init-project` also adds the `.gitignore` lines. See [[dev-sk-nsec-setup_project]]. |
+| `secrets project gitignore` | Add the missing lines `.env*` and `secrets.local.toml` to `.gitignore`. |
+| `secrets target set`, `secrets target rm` | Write or remove a `[targets.<target>]` table. Only with the ids that the operator or the task gives (Rule 8). |
+| `secrets project set` | Change the store URL or the name in `[project]`. Change the store only with the URL that the operator gives. |
 | `secrets plan <target> --env <env>` | Show what `secrets push` sends to a platform: names and statuses only. It calls no platform. See Rule 9 and [[dev-sk-nsec-plan_push]]. |
 | `secrets export` | Only under the conditions below. |
 | `--help`, `--version` | Show the help or the version. |
@@ -139,7 +146,7 @@ When a value or a key is missing, ask the operator. Give the variable, the secre
 
 ## Rule 8 — Platform targets need the operator
 
-A platform target (`vercel`, `convex`, `railway`) in `secrets.toml` tells `secrets push` what to send to a platform. Do not add a `[targets.<target>]` table, and do not add a platform target to the `to` list of an entry, unless the operator or the task names that target.
+A platform target (`vercel`, `convex`, `railway`) in `secrets.toml` tells `secrets push` what to send to a platform. Do not add a `[targets.<target>]` table, and do not add a platform target to the `to` list of an entry, unless the operator or the task names that target. Write the table with `secrets target set`, with the ids that the operator or the task gives (a Vercel project, a Convex deployment short name, a Railway project, service, and environments). Never guess an id.
 
 ## Rule 9 — Delivery to a platform
 

@@ -18,7 +18,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
 
 # Actions
 
-1. **Read the rules.** You read [[dev-knw-nsec-rules]]. Never run `sops`, never open the key file, and never open a store file to diagnose. If the input is a refused store write, a cleanup warning, or a `Nothing was pushed.` message, skip steps 2–8. Follow step 9, then step 10. Use plain `secrets doctor` with the same store, mapping, and environment options. Do not run `store sync`, `doctor --online`, or another command that refreshes this clone before the operator approves the repair. If the shell cannot find `secrets` (`command not found`), stop. Give the operator the install command of [[dev-knw-nsec-cli]] § Install. Do not install the CLI yourself.
+1. **Read the rules.** You read [[dev-knw-nsec-rules]]. Never run `sops`, never open the key file, and never open a store file to diagnose. If the input is a refused store write, a cleanup warning, or a `Nothing was pushed.` message, skip steps 2–8. Follow step 9, then step 10. Use plain `secrets doctor` with the same store, mapping, and environment options. Do not run `store sync`, `doctor --online`, or another command that refreshes this clone before the operator approves the repair. If the shell cannot find `secrets` (`command not found`), stop. Give the operator the install command of [[dev-knw-nsec-cli]] § Install. Do not install the CLI yourself. On a machine that has no key or no store yet, run `secrets setup --print` (it changes nothing), and follow [[dev-knw-nsec-setup]]: give the operator the operator commands of each `todo` step.
 2. **Read the cached state first, then refresh.** Run plain `secrets doctor` with the mapping, store, and environment options for this task. Keep its lines about unpushed commits, changed files, and links. Use `secrets store list` to match the mapping URL to its local store name. When the network is available, refresh only that store:
    ```sh
    secrets store sync <local store name>
@@ -71,9 +71,9 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    | Mapping | `<env>: sops decrypt failed …` | Operator | SOPS did not decrypt the file with the available key sources. This error does not prove that the selected key file is valid. Give the line. See the Key and Store rows. |
    | Mapping | `<VAR> goes to convex: a NEXT_PUBLIC_ variable is for the browser build` | Agent | Remove only `convex` from the targets of that entry. Keep the rest. See step 5. |
    | Mapping | `<VAR>: the literal in <file> looks like a secret` | Operator | A value can be in a committed file. Do not repeat it. Follow [[dev-knw-nsec-rules]] § If a value leaks. |
-   | Mapping | `<path> is not valid:` with a list of problems | Agent | Fix each named entry of `secrets.toml` or `secrets.local.toml`. The problems name fields, not values. For a `targets.<target>: …` problem, fix the table only when the operator or the task gives its content (Rule 8); else report it. A table that is not valid stops every command of the project, also `secret <cmd>`, `run`, and `export`. |
+   | Mapping | `<path> is not valid:` with a list of problems | Agent | Fix each named entry of `secrets.toml` or `secrets.local.toml` with `secrets bind` or `secrets unbind` (`--local` for the local file). The problems name fields, not values. For a `targets.<target>: …` problem, fix the table with `secrets target set` only when the operator or the task gives its content (Rule 8); else report it. When a command refuses the form of the file (`MAPPING_EDIT`), report it to the operator. A table that is not valid stops every command of the project, also `secret <cmd>`, `run`, and `export`. |
    | Mapping | `env.<VAR>.to: "convex" is not allowed: the Convex tool owns <VAR>, …` | Agent | Remove `convex` from the targets of that entry (step 5 shows the forms). The Convex tool writes that variable itself. |
-   | Project hygiene | `.gitignore does not cover …` | Agent | Add `.env*` and `secrets.local.toml` to `.gitignore`. |
+   | Project hygiene | `.gitignore does not cover …` | Agent | Run `secrets project gitignore` in the project folder. Do not edit `.gitignore` by hand. |
    | Project hygiene | `<file> has names that secrets.toml manages: <VAR>, …` | Operator | A `.env*` file has duplicates. Do not open the file. The operator removes the names. |
    | Project hygiene | `secrets.local.toml is tracked by Git` | Agent and operator | Run `git rm --cached secrets.local.toml` and cover it in `.gitignore`. Tell the operator: the Git history keeps the old file. |
    | Machine | `full-disk encryption: …` | Operator | Report it once. It does not stop the work. |
@@ -92,7 +92,6 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
      ```sh
      secrets bind <VAR> --value <the same literal> --to <the other targets>
      ```
-   - You can also edit the `to` list of that one line by hand and remove only `"convex"`.
    - Run `secrets doctor` again. The `warn` for this variable must be gone.
 
 6. **Read the identity.** Run `secrets whoami` when the problem is access.

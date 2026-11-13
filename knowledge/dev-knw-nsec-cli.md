@@ -1,16 +1,16 @@
 ---
-description: "The secrets CLI for agents: the install, each command and its options, the output rules, the exit statuses, the messages that agents see, the operator-only commands, the secret scan of store commits, and the known limits of the current build"
+description: "The secrets CLI for agents: the install, each command and its options (also the setup commands: setup --print, vars, target, unbind, bind --local, project), the output rules, the exit statuses, the messages that agents see, the operator-only commands, the secret scan of store commits, and the known limits of the current build"
 ---
 
 # Knowledge: The `secrets` CLI
 
-The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `35ecaba`. The npm version `0.1.0-beta.0` has the same code.
+The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI at `secrets` canon `471e270` (cycle I: the guided setup and the setup commands). The npm version `0.1.0-beta.1` has the same code. The setup of a team, a machine, and a project is in [[dev-knw-nsec-setup]].
 
 ## Install
 
 Only the operator installs the CLI. An agent does not install it.
 
-- **From npm.** `npm install -g @nuucognition/secrets-cli@beta`. The package gives the two commands `secrets` and `secret`. It needs Node.js 24 or later. The version on the npm tag `beta` is `0.1.0-beta.0` (the code of canon `35ecaba`). `secrets --version` shows the version that is installed.
+- **From npm.** `npm install -g @nuucognition/secrets-cli@beta`. The package gives the two commands `secrets` and `secret`. It needs Node.js 24 or later. The version on the npm tag `beta` is `0.1.0-beta.1` (the code of canon `471e270`). The older `0.1.0-beta.0` has no setup commands. `secrets --version` shows the version that is installed.
 - **In the NUU Cognition workspace.** `ndv` links the two commands: `ndv use secrets dev` for the dev build, `ndv use secrets npm beta` for the npm package.
 - **The other tools.** The package does not include SOPS, age, Git, or gitleaks. `secrets doctor` checks each tool and gives its install command (section Tools).
 - **The build mode.** The npm package is the prod build. Its default secrets home is `<NUU home>/secrets/` ([[dev-knw-nsec-model]] § The store).
@@ -181,27 +181,83 @@ Prints the full age public key of the key file of this machine as one line on st
 ### `secrets init-project` and `secrets bind`
 
 ```sh
-secrets init-project --name <name> --store <url>
+secrets init-project --name <name> --store <url> [--no-gitignore]
 secrets bind <VAR> <name> --to <targets> [--optional] [--mapping <path>]
 secrets bind <VAR> --value <literal> --to <targets> [--mapping <path>]
+secrets bind <VAR> <name> --local [--optional] [--mapping <path>]
+secrets bind <VAR> --value <literal> --local [--mapping <path>]
 ```
 
 | Command or option | Meaning |
 |---|---|
 | `init-project --name <name>` | Required. The project name: a letter or a digit first, then letters, digits, `.`, `_`, or `-`. 100 characters or fewer. |
-| `init-project --store <url>` | Required. The Git URL or path of the store. A URL with a credential is refused. |
+| `init-project --store <url>` | Required. The Git URL or path of the store. A URL with a credential, or a URL that is not a usual form, is refused ([[dev-knw-nsec-setup]] § Store URL forms). |
+| `init-project --no-gitignore` | Do not add the `.gitignore` lines. Use it only when the operator asks. |
 | `bind <VAR>` | The variable name. |
 | `bind <name>` | The secret name, for example `clerk/secret-key`. The form `secret://clerk/secret-key` is also accepted. |
-| `--to <targets>` | Required. A comma-separated list: `local`, `vercel`, `convex`, `railway`. |
+| `--to <targets>` | Required without `--local`. A comma-separated list: `local`, `vercel`, `convex`, `railway`. |
+| `--local` | Write the entry to `secrets.local.toml` beside `secrets.toml` (this machine only). The only target is `local`, and `--to` can be omitted. |
 | `--value <literal>` | A literal that is not secret. Give exactly one of `<name>` or `--value`. |
 | `--optional` | When the store has no value for the name, the CLI does not set the variable and does not stop. `run` then also removes a shell variable of the same name (unless `--keep-env`). Only with `<name>`. A `bind` without `--optional` makes the entry required, also when it was optional before. |
 | `--mapping <path>` | The `secrets.toml` to change. The default is the nearest one. |
 
-- `init-project` writes `secrets.toml` in the current folder. It refuses when the file exists. stdout: `created  <path>  project <name>  store <url>`.
+- `init-project` writes `secrets.toml` in the current folder. It refuses when the file exists. By default it first adds the missing `.gitignore` lines (as `secrets project gitignore`), and it writes `secrets.toml` only when that step passes. stdout: `created  <path>  project <name>  store <url>`, then `added  .env*, secrets.local.toml  to <path>/.gitignore` (only the missing lines) or `unchanged  <path>/.gitignore  Git ignores .env* and secrets.local.toml`. stderr: `secrets: Next: secrets bind <VAR> <name> --to local`.
 - `bind` adds or replaces one entry of `[env]` and keeps every other byte of the file. stdout: `added`, `replaced`, or `unchanged`, then `<VAR> → secret://<name>` (or `→ literal`), the targets, and the path.
-- `bind` refuses a platform target that has no `[targets.<target>]` table. Nothing is written.
+- `bind` refuses a platform target that has no `[targets.<target>]` table: `✘ The target <t> has no [targets.<t>] table in <path>. Nothing was written.` with the hint `Add a [targets.<t>] table first: secrets target set <t> …`.
 - `bind --value` refuses a literal that looks like a secret. It gives the variable name to the check. See [Known limits](#known-limits), item 2.
+- `bind --local` writes only `secrets.local.toml`; `secrets.toml` does not change. It makes the file (mode 600) when it is missing. It refuses (`NOT_IGNORED`, nothing written) when Git does not ignore `secrets.local.toml` (`Next: secrets project gitignore`), when Git tracks it (the hint names `git rm --cached secrets.local.toml`), and when the project folder is not in a Git work tree. `--local` with a target other than `local` is refused (`BAD_TARGET`). stdout: `added|replaced|unchanged  <VAR> → …  to local  in <path of secrets.local.toml>`. When `secrets.toml` also has the variable for `local`, stderr says that the local entry wins on this machine.
 - Steps: [[dev-sk-nsec-setup_project]].
+
+### `secrets unbind`
+
+```sh
+secrets unbind <VAR> [--local] [--mapping <path>]
+```
+
+- It removes the one `[env]` line of `<VAR>` (with its comment) from `secrets.toml`, or with `--local` from `secrets.local.toml`. stdout: `removed  <VAR>  from <path>`.
+- A missing entry: `✘ <VAR> is not in [env] of <path>. Nothing was written.` (`NO_ENTRY`, exit 1). With `--local` and no local file: `✘ <path> does not exist. Nothing was written.`
+- stderr notes: `secrets: secrets.local.toml still has <VAR> for this machine.` (the project entry is gone, the local entry stays), and `secrets: secrets.toml still has <VAR>; its entry is used for local again.` (after `--local`).
+- Do not remove an entry to make a run pass. A missing value goes to the operator ([[dev-sk-nsec-request_value]]).
+
+### `secrets target set` and `secrets target rm`
+
+```sh
+secrets target set vercel --project <name-or-id> [--mapping <path>]
+secrets target set convex --deployment <short-name> [--mapping <path>]
+secrets target set railway --project <name-or-id> --service <name-or-id> --env <store-env>=<railway-env> [--env …] [--mapping <path>]
+secrets target rm <vercel|convex|railway> [--mapping <path>]
+```
+
+- `target set` adds or replaces one `[targets.<target>]` table with the checks of the target tables ([[dev-knw-nsec-model]] § The target tables). `--env` for Railway is repeatable; the store environments are `dev`, `preview`, `prod`; at least one. stdout: `added|replaced|unchanged  [targets.<t>]  <fields>  in <path>`, for example `added  [targets.vercel]  project web  in <path>`.
+- `target set` errors (exit 1, nothing written): `Unknown target "<t>".`; `<--opt> is not an option of the <t> target.`; `The railway target needs at least one --env <store-env>=<railway-env>.`; `The <t> target is not valid. Nothing was written:` with one line for each problem.
+- `target rm` removes the table. It refuses while an entry has the target in `to`: `✘ <n> [env] entry has <t> in to: <VAR>, …. Nothing was written.` (`TARGET_IN_USE`) with the hint ``Remove <t> from the to list of each entry first (secrets bind <VAR> <name> --to <targets>), or remove the entry (secrets unbind <VAR>).`` A missing table: `✘ <path> has no [targets.<t>] table. Nothing was written.` (`NO_TARGET`). stdout: `removed  [targets.<t>]  in <path>`.
+- A target and its fields are operator decisions ([[dev-knw-nsec-rules]] § Rule 8). Run `target set` only with the ids that the operator or the task gives. Never guess an id.
+
+### `secrets project gitignore` and `secrets project set`
+
+```sh
+secrets project gitignore [--mapping <path>]
+secrets project set [--store <url>] [--name <name>] [--mapping <path>]
+```
+
+- `project gitignore` adds the missing lines `.env*` and `secrets.local.toml` at the end of the `.gitignore` of the project folder, under the comment `# NUU Secrets: files with values, and the mapping of this machine`. Git decides what is missing (`git check-ignore`, as `doctor`). stdout: `added  .env*, secrets.local.toml  to <path>/.gitignore` (only the missing lines) or `unchanged  <path>/.gitignore  Git ignores .env* and secrets.local.toml`. When Git still does not ignore a path after the write, or a Git call fails after the write, the CLI puts the old file back and refuses (`NOT_IGNORED`). An ignore line does not change a file that Git tracks already.
+- `project set` changes `name`, `store`, or both in `[project]`. The URL checks are the checks of `init-project`. stdout: `changed|unchanged  [project]  name <name>  store <url>  in <path>`. stderr after a store change: `secrets: the next command that reads the store uses the new URL (it clones the store when this machine has no clone of it).` Change the store only with the URL that the operator gives: it changes where the values of the project come from.
+
+### `secrets vars`
+
+```sh
+secrets vars [--unmapped] [--json] [--mapping <path>]
+```
+
+- It scans the folder of the mapping for the variable names that the source code reads: `process.env.NAME`, `process.env["NAME"]`, `import.meta.env.NAME`, destructuring of `process.env` and `import.meta.env`, `Bun.env.NAME`, `Deno.env.get("NAME")`, `os.environ["NAME"]`, `os.environ.get("NAME")`, `os.getenv("NAME")`. Files: `.js .jsx .mjs .cjs .ts .tsx .mts .cts .vue .svelte .astro .py`.
+- It never reads a `.env*` file or folder. It skips `.git`, `node_modules`, build outputs (`dist`, `build`, `.next`, `.turbo`, `.vercel`, `out`, `coverage`, …), Python environments, a sub-folder with its own `secrets.toml`, symbolic links, binary files, and files over 1 MiB. It shows names and file paths only, never a source line.
+- The states: `mapped` (in `secrets.toml`), `local` (only in `secrets.local.toml`), `tool` (a runtime, a platform, or a tool owns it, for example `NODE_ENV`, `CI`, `PORT`, the `VERCEL_*` names, the Convex tool names), `unmapped`.
+- stdout: a table `NAME  STATE  FILES`, then `vars: <n> name(s) in <m> file(s): <a> mapped, <b> local, <c> tool, <d> unmapped`. `--unmapped` shows only the `unmapped` rows (the summary counts all). `--json` prints one object with `variables: [{ name, state, files }]` and the counts.
+- A `tool` name gets no entry. Some `unmapped` names can be names that the framework sets itself: check the documentation of the app.
+
+### `secrets setup --print`
+
+`secrets setup --print` shows the state of each setup step and the exact commands of each step that remains. It changes nothing, takes no lock, makes no network call, and exits 0. The output form and the use are in [[dev-knw-nsec-setup]] § `secrets setup --print`. `secrets setup` without `--print` is an operator command.
 
 ### Help and version
 
@@ -213,6 +269,7 @@ Do not run these commands. The one exception is in [[dev-knw-nsec-rules]] § Rul
 
 | Command | Options | What it does |
 |---|---|---|
+| `secrets setup` | none (`--print` is for agents) | The guided setup on a terminal: tools, key, store (new, join, or on this machine), project, targets, variables, values, check. It makes keys and stores and writes values. See [[dev-knw-nsec-setup]]. |
 | `secrets set <name>` | `--env <env>` (default `dev`), `--store <name>`, `--mapping <path>`, `--allow-empty` | Writes one value from a hidden prompt or stdin. `--offline` is refused: a write needs the remote. |
 | `secrets unset <name>` | `--env <env>` (required), `--store`, `--mapping` | Removes one name from one environment. |
 | `secrets edit` | `--env <env>` (required), `--store`, `--mapping` | Opens the values of one store file in `$VISUAL`, `$EDITOR`, or `vi`. The plaintext is in a private temporary file while the editor runs. For `preview`, the editor shows only the preview file, not the dev values under it. |
@@ -342,7 +399,7 @@ A scan refusal before staging writes no new Git object. A later failure can leav
 - Diagnostics go to stderr: the `secret:` line, notices that start with `secrets:`, and errors. A CLI error starts with `✘`. It can have remedy lines, but not always. An error of the option parser starts with `error:`, for example `error: unknown option '--bad'` or `error: required option '--format <format>' not specified`.
 - **Hints.** The lines under a `✘` line are hints. The output layer of the NUU CLIs (cli-core) prints a hint that starts with a command (``Run `<command>` …``) as `Next: <command>`. It prints a second command as `Or: <command>`. The rest of that line does not print. For example, ``Run `secrets doctor` to check gitleaks.`` prints as `Next: secrets doctor`. Thus the CLI puts each rule that must print in a hint of its own, for example `Then run the command again. Do not bypass a failed scan.` A hint that does not start with a command prints in full.
 - Output names only public facts: variable names, secret names, store names, project names, recipient ids, public keys and key fingerprints, file names, paths, and line numbers.
-- The CLI never shows the content of a store file, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `secrets.toml`, `secrets.local.toml`, `stores.toml`, a `.env` file, or the target of a symbolic link. SOPS and Git errors are a fixed summary. A URL is shown without its user information.
+- The CLI never shows the content of a store file, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `secrets.toml`, `secrets.local.toml`, `stores.toml`, a `.env` file, or the target of a symbolic link. SOPS and Git errors are a fixed summary. A URL is shown without its user information (`https://***@host/…`). A store URL that is not a usual form ([[dev-knw-nsec-setup]] § Store URL forms) shows as `<a store URL that the CLI cannot show>`, in each command.
 - The CLI never shows the output of gitleaks. From the report, it shows only rule ids of the gitleaks form and its own file labels ([The secret scan of store commits](#the-secret-scan-of-store-commits)). In the write path, an unexpected error shows at most a system error code, never a raw error or a path.
 - **Paths that the user chose.** Some error lines show a path that the user chose or set, for example `✘ No usable age key: no age key file at <path>.` and `✘ The mapping file <path> does not exist.` The output rules for values and file content do not cover the text of that path. An agent does not copy a line when its path or another field holds a value ([[dev-knw-nsec-rules]] § Rule 10, What to copy).
 
@@ -406,10 +463,17 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 | `✘ The secret scan (gitleaks) of the change to store <store> did not complete: <reason>.` with `Next: secrets doctor` and `Then run the command again. Do not bypass a failed scan.` | `SECRET_SCAN_FAILED`: a store write stopped (exit 1). | Run `secrets doctor` and report the fixed reason. Follow [[dev-knw-nsec-rules]] § Rule 10. |
 | `✘ A file of store <store> breaks the store policy. Nothing was written.` (`UNSAFE_STORE`) or `✘ The result of a SOPS write breaks the store policy. Nothing was committed.` (`UNSAFE_RESULT`), with a line such as `- dev.enc.yaml: line <n>: the SOPS metadata field "<field>" does not have the form that SOPS writes` | A store file, or the result of a SOPS write, breaks the store policy. The line names the field only, never its value. | Stop and report the file label, the line number, and the field name to the operator. Do not retry the write. Do not open the store file. Follow [[dev-knw-nsec-rules]] § Rule 10. |
 | `secrets: gitleaks is not on PATH, so the secret scan of the store commit did not run. …` | The store write had no scan. | Check the exit status, and report both facts. Follow [[dev-knw-nsec-rules]] § Rule 10. |
+| `✘ secrets setup needs a terminal on stdin and stdout. Nothing was changed.` with `Next: secrets setup --print` | `secrets setup` with no terminal (exit 1, `NO_TERMINAL`). | Do not run `secrets setup`. Run `secrets setup --print`, and give the operator the operator commands ([[dev-knw-nsec-setup]]). |
+| `<a store URL that the CLI cannot show>` | A store URL that is not a usual form. The CLI never shows it. | Ask the operator for the URL in a usual form. To fix a mapping: `secrets project set --store <url>`. To fix a clone: the operator runs `secrets store remove <name>`, then `secrets store clone <url>`. |
+| `✘ --store: a URL that the CLI cannot check (…)` or `✘ --store: an HTTP URL with user information (a token). …` (`BAD_STORE_URL`) | `init-project` or `project set` refused the URL. Nothing was written. | Ask the operator for a URL in a usual form with no credential. Git gets the credential from its helper or the SSH key. |
+| `✘ secrets <cmd> cannot edit this secrets.toml: <reason>. Nothing was written.` (`MAPPING_EDIT`) | A setup command cannot edit an unusual form of the file (for example dotted keys or a multi-line value). | Report it to the operator, with the reason. |
+| `✘ Git does not ignore <path>. Nothing was written.` with `Next: secrets project gitignore`, or `✘ Git tracks <path>. Nothing was written.` (`NOT_IGNORED`) | `bind --local` refused: Git does not ignore `secrets.local.toml`, or tracks it. | Run `secrets project gitignore`. For a tracked file, run `git rm --cached secrets.local.toml` and tell the operator: the Git history keeps the old file. |
+| `✘ <n> [env] entry has <t> in to: <VAR>, …. Nothing was written.` (`TARGET_IN_USE`) | `target rm` while entries still use the target. | Remove the target from each entry with `bind` (the same name, the other targets) only when the operator or the task says so. |
+| `✘ <VAR> is not in [env] of <path>. Nothing was written.` (`NO_ENTRY`) | `unbind` of a variable with no entry. | Check the name with `secrets vars`. |
 
 ## Known limits
 
-These limits are in the current build (`secrets` canon `35ecaba`).
+These limits are in the current build (`secrets` canon `471e270`, npm `0.1.0-beta.1`).
 
 1. **The `dotenv` npm reader loses `__proto__`.** The `dotenv` package loses a variable named `__proto__` when it reads text. `secrets export --format dotenv` warns on stderr and still prints the variable. Do not name a variable `__proto__`. When a program needs one, use `--format json`, `--format shell`, or `secret <cmd>`.
 2. **The secret check of literals is not complete.** `bind` and `doctor` find a known key prefix (for example `sk_live_`), a key block, a JWT, a URL with a password, a high-entropy string of 24 or more characters, and a random token of 16 to 23 letters and digits of one letter case. In the tests of the CLI, the check found about 94% of random base36 tokens and 99.5% of random hex tokens of that length. It misses tokens with few changes between letters and digits (for example 15 letters and 1 digit) and mixed-case tokens shorter than 24 characters. A UUID and a 40-character lowercase hex string (the form of a Git commit SHA) pass, except when a word of the variable name is `SECRET`, `SECRETS`, `TOKEN`, `TOKENS`, `PASSWORD`, `PASSWD`, `PRIVATE`, `CREDENTIAL`, `CREDENTIALS`, `KEY`, `KEYS`, `APIKEY`, or `SALT`. The CLI splits the name into words at `_` and at other characters that are not letters or digits. A camelCase name such as `apiToken` is one word, so a UUID passes there. Do not rely on the check: when a value can be secret, it is not a literal.
@@ -427,3 +491,9 @@ These limits are in the current build (`secrets` canon `35ecaba`).
 14. **A false positive is possible.** The tests with gitleaks 8.30.1 found no false positive in SOPS ciphertext, age stanzas, or the MAC. A different value or rule can still produce a false positive. Only the operator decides that a finding is a false positive.
 15. **A late failure can leave local objects.** A scan refusal before staging writes no new Git object. A later failure can leave local objects in the store clone. Do not assume that a reset removed them.
 16. **A hint shows only its command.** cli-core prints a hint that starts with a command as `Next: <command>` or `Or: <command>`, and the rest of that line does not print ([Output rules](#output-rules), Hints). The CLI puts each rule that must print in a line of its own. For example, a failed scan prints `Next: secrets doctor` and `Then run the command again. Do not bypass a failed scan.` The rule is the same: do not bypass a failed scan.
+17. **`secrets vars` finds only its read forms.** A name that the code makes at run time is not found. A name in a comment counts. Names that a framework sets itself can show as `unmapped`.
+18. **`secrets setup` exits with the status of `doctor`.** A complete setup exits 1 while a check fails, for example while a required prod value is missing.
+19. **The recovery key path check cannot find each work tree.** The setup refuses a path below a `.git` entry and asks Git. A work tree that Git finds only through `GIT_DIR` (for example a bare repository of dotfiles with the home folder as its work tree) has no `.git` entry, and the check cannot find it.
+20. **A deleted recovery key file can stay on the disk.** On an SSD or a copy-on-write file system, a deleted file can stay readable. The paper is the recovery key.
+21. **The store URL forms are strict.** The CLI refuses, and does not show, each store URL that is not a usual form ([[dev-knw-nsec-setup]] § Store URL forms), also some forms that Git accepts, for example `ssh://git@my_host/x` (a `_` in a URL host) or a path with `?` or `#`. A hint for an SSH URL with a user name shows `***@`, so that hint command is not usable as it is.
+22. **`secrets setup --print | head` ends with an error.** When the reader of stdout closes early, the command ends with an `EPIPE` error and exit 1. This is also true for `doctor`.
