@@ -6,6 +6,6 @@ source:
 version: "0.5.2"
 name: NUU Secrets
 shorthand: nsec
-description: "Teaches agents to use NUU Secrets safely: run apps with secrets, map variables, diagnose, and follow the no-value rules"
+description: "Use when a task runs an app with secrets, or uses API keys, tokens, .env files, secrets.toml, or deploy credentials."
 dependencies:
   "@nuucognition/flint": "^0"
