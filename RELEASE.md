@@ -4,7 +4,7 @@ The notes of each version of the shard `nsec` (`@nuucognition/nuu-secrets`). The
 
 ## 0.6.0
 
-For the CLI of Mission 002 (`even-macbook`, not yet on canon): the CLI of canon `471e270` with the identities, the project index, and the local web page `secrets ui`. The npm version `0.1.0-beta.1` does not have these parts.
+For the CLI of Mission 002 (canon `633496d`): the CLI of canon `471e270` with the identities, the project index, and the local web page `secrets ui`. The npm version `0.1.0-beta.1` does not have these parts.
 
 - **Rule 11: `secrets ui` is for the operator.** Agents never run `secrets ui` (also when the operator asks, and with no way around the terminal check), never open its URL, login link, page, or API, and never read values from it. A login link is a credential. The rule is in the rules, the init, and the headless init.
 - **Rule 12: identities.** The agent uses the identity that the CLI selects. It does not add `--identity` or set `SECRETS_IDENTITY` or `SOPS_AGE_KEY_FILE` unless the operator names the identity. `identity add|use|rm`, `project identity <name>`, `project identity --clear`, and `project forget` are operator commands. `identity list`, `project list`, and `project identity` (show) are agent commands. On `LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, `UNKNOWN_IDENTITY`, `PROJECT_INDEX`, the parent-identity warning, or the link warning, the agent stops and gives the operator the exact message and the remedy of the CLI. In a headless session, these are blockers.

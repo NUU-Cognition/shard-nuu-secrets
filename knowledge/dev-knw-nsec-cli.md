@@ -4,7 +4,7 @@ description: "The secrets CLI for agents: the install, each command and its opti
 
 # Knowledge: The `secrets` CLI
 
-The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI of Mission 002 (branch `even-macbook`, not yet on canon): the CLI of canon `471e270` (cycle I: the guided setup and the setup commands), with the identities, the project index, and `secrets ui`. The npm version `0.1.0-beta.1` has the code of canon `471e270`: it has no identities, no project index, and no `secrets ui`. The setup of a team, a machine, and a project is in [[dev-knw-nsec-setup]].
+The CLI is `secrets`. Its alias `secret` is the short form of `secrets run`: `secret pnpm dev` is `secrets run pnpm dev`. This file lists each command, its options, and its output. `secrets <command> --help` shows the same options. The words are the words of [[dev-knw-nsec-rules]] § Words. This file describes the CLI of Mission 002 (canon `633496d`): the CLI of canon `471e270` (cycle I: the guided setup and the setup commands), with the identities, the project index, and `secrets ui`. The npm version `0.1.0-beta.1` has the code of canon `471e270`: it has no identities, no project index, and no `secrets ui`. The setup of a team, a machine, and a project is in [[dev-knw-nsec-setup]].
 
 ## Install
 
@@ -552,7 +552,7 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 
 ## Known limits
 
-These limits are in the current build (the CLI of Mission 002 on `even-macbook`, not yet on canon; items 1 to 22 also apply to canon `471e270` and npm `0.1.0-beta.1`).
+These limits are in the current build (the CLI of Mission 002, canon `633496d`; items 1 to 22 also apply to canon `471e270` and npm `0.1.0-beta.1`).
 
 1. **The `dotenv` npm reader loses `__proto__`.** The `dotenv` package loses a variable named `__proto__` when it reads text. `secrets export --format dotenv` warns on stderr and still prints the variable. Do not name a variable `__proto__`. When a program needs one, use `--format json`, `--format shell`, or `secret <cmd>`.
 2. **The secret check of literals is not complete.** `bind` and `doctor` find a known key prefix (for example `sk_live_`), a key block, a JWT, a URL with a password, a high-entropy string of 24 or more characters, and a random token of 16 to 23 letters and digits of one letter case. In the tests of the CLI, the check found about 94% of random base36 tokens and 99.5% of random hex tokens of that length. It misses tokens with few changes between letters and digits (for example 15 letters and 1 digit) and mixed-case tokens shorter than 24 characters. A UUID and a 40-character lowercase hex string (the form of a Git commit SHA) pass, except when a word of the variable name is `SECRET`, `SECRETS`, `TOKEN`, `TOKENS`, `PASSWORD`, `PASSWD`, `PRIVATE`, `CREDENTIAL`, `CREDENTIALS`, `KEY`, `KEYS`, `APIKEY`, or `SALT`. The CLI splits the name into words at `_` and at other characters that are not letters or digits. A camelCase name such as `apiToken` is one word, so a UUID passes there. Do not rely on the check: when a value can be secret, it is not a literal.
