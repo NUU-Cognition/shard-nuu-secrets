@@ -1,5 +1,5 @@
 ---
-description: "The secrets CLI for agents: the install, each command and its options (also the setup commands: setup --print, vars, target, unbind, bind --local, project; and --identity, identity list, project list, project identity), the operator commands (also identity add|use|rm, project identity <name>, project forget, and secrets ui, which agents never run), the output rules, the exit statuses, the messages that agents see, the secret scan of store commits, and the known limits of the current build"
+description: "The secrets CLI for agents: the install, each command and its options (also the setup commands: setup --print, vars, target, unbind, bind --local, project; and --identity, identity list, project list, project add, project identity), the operator commands (also identity add|use|rm, project identity <name>, project forget, and secrets ui, which agents never run), the output rules, the exit statuses, the messages that agents see, the secret scan of store commits, and the known limits of the current build"
 ---
 
 # Knowledge: The `secrets` CLI
@@ -195,6 +195,29 @@ secrets project identity [--mapping <path>]
 - `project identity` with no name and no `--clear` shows the identity of the project on this machine: `identity  <name or none>  project <project>  <path>`. With no identity, stderr says `secrets: to set one: secrets project identity <name>` (an operator command). A `secrets.toml` with a link in its path, or outside the project of the current folder, shows `identity  none`. It changes nothing.
 - `project identity <name>`, `project identity --clear`, and `project forget` are operator commands.
 
+### `secrets project add`
+
+```sh
+secrets project add <path> [--dry-run] [--json]
+```
+
+- `<path>` is a folder, or one `secrets.toml`. `~` and a relative path work. The command finds each `secrets.toml` under the folder and adds its project to the project index. It writes only `projects.toml`, as each command that loads a `secrets.toml`. It changes no project file, reads no store and no value, and decrypts nothing. Agents can run it (Rule 6 of [[dev-knw-nsec-rules]]). Run it with `--dry-run` first.
+- **The search.** It follows no symbolic link: a `secrets.toml` that is a link is skipped (`linked`), and a folder link is not entered. It does not enter a hidden folder (a name that starts with `.`), or the folders `node_modules`, `dist`, `build`, `out`, `target`, `coverage`, `vendor`, `venv`, `__pycache__`, and `Library`.
+- **The limits.** 12 folders deep, 50000 folders, 15 seconds, and 1000 files. When a limit stops the search, the command adds the files that it found, and stderr says ``secrets: the search stopped at the limit of <limit>, so it did not look in each folder. The command added the files that it found. Give a smaller folder to find the rest.`` (with `--dry-run`: `shows` in place of `added`). Then run the command again on a smaller folder.
+- **One line for each file** on stdout. The word comes first:
+  - `added  <name>  store <store>  <path>`: a new entry in `projects.toml`. A new entry has no identity.
+  - `updated  <name>  store <store>  <path>`: the entry gets the new name or store; its identity stays.
+  - `known  <name>  store <store>  <path>`: the entry is up to date; nothing changes.
+  - `skipped  <reason>  <path>`: not added. The reasons: `not valid` (the file does not parse), `not readable`, `linked` (a symbolic link in its path), `changed` (the file changed during the read), and `duplicate` (`projects.toml` has entries for the file with different identities).
+- **The total line.** `<n> files: <a> added, <u> updated, <k> known, <s> skipped.`, then `projects.toml: <path>` when the command wrote the file. With no file: `No secrets.toml in <path>.`, and stderr names the folders that the search does not enter. stderr also counts the links that the search did not follow and the folders that it could not read.
+- **`--dry-run`** shows the lines and writes nothing. The lines say `add` and `update`, and the total line says `<a> to add, <u> to update, <k> known, <s> skipped. Dry run: nothing was written.`
+- **`--json`** prints one object: `path`, `file`, `dryRun`, `written`, `files` (each with its state and, for `skipped`, its reason), `totals`, `stopped`, `limits`, `skippedLinks`, and `unreadableFolders`.
+- **Refusals** (exit 1, nothing was added):
+  - `✘ <path> does not exist. Nothing was added.` (`NO_FOLDER`).
+  - `✘ <path> is a symbolic link. The search follows no symbolic link. Nothing was added.` or `✘ <path> goes through the symbolic link <link>. …` (`LINKED_FOLDER`), with the hints `Give the real path: secrets project add <real path>` and `Give a path with no symbolic link in it.`
+  - `✘ <path> is not a folder or a secrets.toml file. Nothing was added.`, `✘ The CLI cannot read <path> (<code>). Nothing was added.`, or a path with a part that the CLI cannot check (`BAD_FOLDER`).
+- **What you do with the result.** Report each `skipped` line with its reason. For `duplicate`, give the operator the remedy of `secrets project list` (`secrets project identity <name> --mapping <path>` or `secrets project forget <path>`, operator commands). For `linked` and `LINKED_FOLDER`, do not change a link: use the real path, or report it. `project add` never sets an identity: a new project uses the default identity until the operator runs `secrets project identity <name>`.
+
 ### `secrets store list`, `secrets store sync`, `secrets store clone`
 
 | Command | What it does |
@@ -345,6 +368,7 @@ secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
 - `--identity <name>` must name an identity of `identities.toml`, else `✘ There is no identity named "<name>" (--identity). Nothing was started.` (`UNKNOWN_IDENTITY`). `--idle` is a whole number of minutes, 1 to 1440 (default 15), else `✘ --idle must be a whole number of minutes (1 to 1440). Nothing was started.` (`BAD_IDLE`).
 - The server listens on `127.0.0.1` only, on a random port. The terminal shows the login link `http://127.0.0.1:<port>/#t=<token>` (one use, 60 seconds). The page then asks for an identity. The facts for the operator are in [[dev-knw-nsec-setup]] § The UI: `secrets ui`.
 - Each write of the page uses the write path of the CLI, with the same scan rules and messages ([The secret scan of store commits](#the-secret-scan-of-store-commits)). The terminal shows one line for each write and each sync, with names only. Each reveal or copy writes one line in `<secrets home>/ui-reveal.log` (never the value).
+- A page write that stops after one part shows `Only a part of the change was saved.` (`PARTIAL_WRITE`, status 409) and offers "Undo the saved part" for 60 seconds. The page cannot unset a store name that the secret detector flags: the operator uses `secrets unset <name> --env <env>` in a terminal. When the operator sends you one of these texts, report it. Do not repair the store or `secrets.toml` yourself.
 
 ### `secrets push <target>` (operator)
 
@@ -519,7 +543,7 @@ After the command starts, `secret <cmd>` exits with the exit status of the comma
 | `✘ The CLI cannot prove that <path> is the secrets.toml that it read: the file changed during the command. …` (`MAPPING_CHANGED`) | The file or its path changed during the command, and its entry has an identity. Nothing was read. | Stop. Give the operator the message and its remedy lines. |
 | `✘ <path> is outside the project of the current folder (<boundary>). The identity <name> of that secrets.toml in projects.toml applies only in its own project …` (`OUTSIDE_PROJECT`) | The search found the `secrets.toml` of another project above the Git repository of the current folder. Nothing was read. | Stop. Give the operator the message and its remedy lines. Do not change the folder or `--mapping` to pass the check. |
 | `✘ projects.toml has <n> entries for one secrets.toml (<path>), with different identities:` with one line for each entry (`DUPLICATE_PROJECT`) | An index of an earlier version has two entries of one file. Nothing was read. | Stop. Give the operator the message and its remedy lines (`secrets project identity <name> --mapping <path>`, `secrets project forget <path>`, or `--identity <name>`). |
-| `✘ There is no identity named "<name>" (<where>).` (`UNKNOWN_IDENTITY`) with `Next: secrets identity list` | `--identity`, `SECRETS_IDENTITY`, the project identity, or the default names an identity that `identities.toml` does not have. `<where>` names the source. | Stop. Run `secrets identity list`, and give the operator both outputs. |
+| `✘ There is no identity named "<name>" (<where>)…` (`UNKNOWN_IDENTITY`) with `Next: secrets identity list` | `--identity`, `SECRETS_IDENTITY`, the project identity, or the default names an identity that `identities.toml` does not have. `<where>` names the source. | Stop. Run `secrets identity list`, and give the operator both outputs. |
 | `✘ The CLI cannot read the identity of project <name>: …` (`PROJECT_INDEX`) | `projects.toml` is not valid or not a regular file. | Stop. Run `secrets project list`, and give the operator both outputs. Do not edit `projects.toml`. |
 | `secrets: warning: <path> has no identity of its own in projects.toml, so the CLI uses <identity or key file>. The secrets.toml above it in the same project, <path> (project <name>), has the identity <name>. …` | The nearest `secrets.toml` has no project identity, but a `secrets.toml` above it has one. The command did not stop: it used the default. | After the command, stop and give the operator the warning ([[dev-knw-nsec-rules]] § Rule 12). |
 | `secrets: warning: …, so the identity <name> of its target <path> in projects.toml does not apply (a link can name the secrets.toml of another project). …` | The path of the `secrets.toml` has a link. The command did not use the identity of the link target. | After the command, stop and give the operator the warning. |

@@ -23,7 +23,7 @@ The complete rules are in [[dev-knw-nsec-rules]].
 6. You are a user. The rules prevent accidents. They are not a security boundary.
 7. Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` only with the commands of the CLI (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), not by hand. Write a target table or change the store URL only with the ids or the URL that your prompt gives for the operator.
 8. Never run `secrets ui`, also when your prompt asks for it. Never open its URL or login link, its page, or its API, and never read a value from it. The UI is for the operator. See [[dev-knw-nsec-rules]] § Rule 11.
-9. Use the identity that the CLI selects. Do not add `--identity`, and do not set `SECRETS_IDENTITY` or `SOPS_AGE_KEY_FILE`, unless your prompt names the identity for the operator. An identity problem (`LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, an unknown identity, the parent-identity warning) is a blocker. See [[dev-knw-nsec-rules]] § Rule 12.
+9. Use the identity that the CLI selects. Do not add `--identity`, and do not set `SECRETS_IDENTITY` or `SOPS_AGE_KEY_FILE`, unless your prompt names the identity for the operator. An identity problem (`LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, an unknown identity, `PROJECT_INDEX`, the link warning, the parent-identity warning) is a blocker. See [[dev-knw-nsec-rules]] § Rule 12.
 
 ## What Is Different in a Headless Session
 

@@ -22,7 +22,7 @@ NUU Secrets keeps the secrets of a team in one encrypted Git store and gives the
 - **No account.** A NUU account is optional. No command needs a login. NUU hosts no secrets.
 - **The setup.** Each setup step is a command of the CLI: no step needs a hand edit of a file. `secrets setup` guides the operator through all steps on a terminal (an operator command). `secrets setup --print` shows the steps that remain and their commands, and changes nothing.
 - **Identities.** An identity is a name for one age key file of this machine (`identities.toml`). One machine can have several identities, for example one for the store of the team and one for the store of a client. For each command, the CLI selects one key file: `--identity`, `SECRETS_IDENTITY`, `SOPS_AGE_KEY_FILE`, the identity of the project in `projects.toml`, the default identity, then `~/.config/sops/age/keys.txt`. You use the identity that the CLI selects.
-- **The project index.** `projects.toml` lists the projects of this machine: paths, names, stores, and identities, never values. Each command that loads a `secrets.toml` records its project. `secrets project list` shows the index.
+- **The project index.** `projects.toml` lists the projects of this machine: paths, names, stores, and identities, never values. Each command that loads a `secrets.toml` records its project. `secrets project add <folder>` adds the projects under a folder. `secrets project list` shows the index.
 - **The UI.** `secrets ui` is a local web page for the operator: the stores, the projects, and the values (hidden until a reveal). The operator can set values there. You never run it and never read values from it.
 
 The full model is in [[dev-knw-nsec-model]]. The command reference, the exit statuses, and the known limits are in [[dev-knw-nsec-cli]]. The setup of a new team, a new machine, and a project is in [[dev-knw-nsec-setup]].
@@ -42,7 +42,7 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 9. Never set `SECRETS_GITLEAKS=0`, and never remove, rename, or hide gitleaks on `PATH`. Before a store write that this shard allows, check for an inherited `SECRETS_GITLEAKS=0` and report it. When the secret scan stops a write (`SECRET_SCAN_FOUND`, `SECRET_SCAN_FAILED`), stop and report. See [[dev-knw-nsec-rules]] § Rule 10.
 10. Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` only with the commands of the CLI (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), not by hand. Write a target table or change the store URL only with the ids or the URL that the operator gives.
 11. Never run `secrets ui`, also when the operator asks. Never open its URL or login link, its page, or its API, and never read a value from it. The UI is for the operator. See [[dev-knw-nsec-rules]] § Rule 11.
-12. Use the identity that the CLI selects. Do not add `--identity`, and do not set `SECRETS_IDENTITY` or `SOPS_AGE_KEY_FILE`, unless the operator names the identity. When a command or `doctor` reports `LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, an unknown identity, or the warning about the identity of a parent project, stop and tell the operator the exact message and the remedy of the CLI. See [[dev-knw-nsec-rules]] § Rule 12.
+12. Use the identity that the CLI selects. Do not add `--identity`, and do not set `SECRETS_IDENTITY` or `SOPS_AGE_KEY_FILE`, unless the operator names the identity. When a command or `doctor` reports `LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, an unknown identity, `PROJECT_INDEX`, the link warning, or the warning about the identity of a parent project, stop and tell the operator the exact message and the remedy of the CLI. See [[dev-knw-nsec-rules]] § Rule 12.
 
 ## Situations
 
@@ -84,6 +84,7 @@ secrets whoami                           # the id, the identity, the key fingerp
 secrets identity list                    # the identities, their public keys and stores, and the active selection
 secrets project list                     # the project index: name, store, identity, state, path
 secrets project identity                 # show the identity of this project; changes nothing
+secrets project add <folder> --dry-run   # find each secrets.toml under the folder; without --dry-run, add to projects.toml
 secrets store list                       # the store clones of this machine
 secrets keygen --public                  # the public key of this machine; makes no key
 secrets setup --print                    # the state of each setup step and the commands that remain; changes nothing

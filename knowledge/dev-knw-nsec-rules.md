@@ -127,6 +127,7 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 | `secrets whoami` | Show the recipient id, the selected identity, the key fingerprint, and the stores of this machine. |
 | `secrets identity list` | List the identities: the names, the public keys, the key file paths and their state, the default, the stores and groups of each identity, and the `active:` line (the key that the CLI selects here). No private key. Do not open the key files that it names (Rule 4). |
 | `secrets project list` | List the project index: name, store, identity, the last load, the state (`ok`, `missing`, `linked`, `duplicate`), and the path. No values. |
+| `secrets project add <path>` | Add the projects under a folder (or one `secrets.toml`) to the project index. It writes only `projects.toml`, as each command that loads a `secrets.toml`: a new entry has no identity, and a known entry keeps its identity. It changes no project file, and it reads no store and no value. Run it with `--dry-run` first. |
 | `secrets project identity` (no name, no `--clear`) | Show the identity of the project of the current folder (or of `--mapping <path>`). It changes nothing. |
 | `secrets store list` | List the store clones of this machine (no values). |
 | `secrets store sync <name>` | Refresh one store clone that a plain `secrets doctor` checked first. Always name the store. |
@@ -207,7 +208,7 @@ In a headless session, a scan refusal and an inherited `SECRETS_GITLEAKS=0` are 
 - **Never run `secrets ui`.** This applies to each option (`--no-open`, `--identity`, `--idle`), and also when the operator asks. With no terminal, the CLI refuses: `✘ secrets ui needs a terminal on stdin and stdout: the UI is for a person at a terminal. Nothing was started.` (`NO_TERMINAL`). Do not give it a terminal (a pseudo-terminal, `script`, `expect`, `tmux`, or a terminal tool of your harness).
 - **Never read values from the UI.** Do not open the URL or the login link of the UI. Do not open the page in a browser or in a browser tool. Do not send a request to its server or its API (`curl`, `fetch`, or another HTTP client to `127.0.0.1:<port>`). Do not read its launch file: it holds the login token.
 - **A login link is a credential.** The link has the form `http://127.0.0.1:<port>/#t=<token>`. When the operator sends you a link of this form, do not open it, and do not repeat the token. Tell the operator that the link is now in the session transcript. The token works one time, in the first 60 seconds. For a new link, the operator stops `secrets ui` and runs it again.
-- **The reveal log is for the operator.** `<secrets home>/ui-reveal.log` holds one line for each reveal or copy: the time, the identity, the store, the environment, and the name, never the value. Do not change or delete it.
+- **The reveal log is for the operator.** `<secrets home>/ui-reveal.log` holds one line for each reveal or copy: the time, the identity, and the store, the environment, and the name (for a literal: the project and the variable), never the value. Do not change or delete it.
 - **What you do.** You use `secret <cmd>` to run a program with the values. You ask the operator to set a value in the UI or with `secrets set` ([[dev-sk-nsec-request_value]]). The writes of the page are operator writes: they use the write path of the CLI (the lock, the policy check, the secret scan, the commit, and the push). When the operator sends you an error of the page, read it as a message of the CLI ([[dev-sk-nsec-diagnose]]).
 
 ## Rule 12 — Identities: use the identity that the CLI selects
@@ -225,7 +226,7 @@ The CLI selects one key file for each command. The selection order is in [[dev-k
   | `MAPPING_CHANGED` | `✘ The CLI cannot prove that <path> is the secrets.toml that it read: the file changed during the command. …` |
   | `OUTSIDE_PROJECT` | `✘ <path> is outside the project of the current folder (<boundary>). The identity <name> of that secrets.toml in projects.toml applies only in its own project (its folder, or its Git repository), …` |
   | `DUPLICATE_PROJECT` | `✘ projects.toml has <n> entries for one secrets.toml (<path>), with different identities:` |
-  | `UNKNOWN_IDENTITY` | `✘ There is no identity named "<name>" (<where>).` |
+  | `UNKNOWN_IDENTITY` | `✘ There is no identity named "<name>"` (then ` (<where>)` and the end of the sentence) |
   | `PROJECT_INDEX` | `✘ The CLI cannot read the identity of project <name>: …` |
   | the parent warning | `secrets: warning: <path> has no identity of its own in projects.toml, so the CLI uses <identity or key file>. The secrets.toml above it in the same project, <path> (project <name>), has the identity <name>. …` |
   | the link warning | `secrets: warning: … so the identity <name> of its target <path> in projects.toml does not apply (a link can name the secrets.toml of another project). …` |

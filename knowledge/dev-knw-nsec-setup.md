@@ -23,6 +23,7 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 | The values | Operator | `secrets set <name> --env <env>`, or the page of `secrets ui` |
 | The identities of this machine | Operator | `secrets identity add\|use\|rm`, `secrets project identity <name>` (or `--clear`) |
 | Show the identities and the project index | Agent or operator | `secrets identity list`, `secrets project list`, `secrets project identity` |
+| Add the projects of a folder to the project index | Agent or operator | `secrets project add <folder>` (first with `--dry-run`), or "Add projects from a folder" in the page of `secrets ui` (operator) |
 | Remove a project from the project index | Operator | `secrets project forget <name\|path>` |
 | The local web page | Operator only (never an agent) | `secrets ui` |
 | Check | Agent or operator | `secrets doctor` |
@@ -155,16 +156,19 @@ When a command stops on an identity problem (`LINKED_MAPPING`, `MAPPING_CHANGED`
 
 ## The project index
 
-`projects.toml` in the secrets home lists the projects of this machine ([[dev-knw-nsec-model]] § The project index). Each command that loads a `secrets.toml` records its project. Nobody edits the file by hand.
+`projects.toml` in the secrets home lists the projects of this machine ([[dev-knw-nsec-model]] § The project index). Each command that loads a `secrets.toml` records its project. `secrets project add <folder>` adds the projects that no command loaded yet, for example the projects of a monorepo. Nobody edits the file by hand.
 
 ```sh
 secrets project list [--json]             # NAME, STORE, IDENTITY, SEEN, STATE, PATH
+secrets project add ~/code --dry-run      # find each secrets.toml under the folder; write nothing
+secrets project add ~/code                # add the projects; writes only projects.toml
 secrets project forget my-app             # a project name
 secrets project forget ./apps/web         # a path: a secrets.toml or its folder (a word with "/", or that starts with "." or "~")
 ```
 
 - The states are `ok`, `missing` (the path does not exist), `linked` (the path has a symbolic link: its identity does not apply), and `duplicate` (another entry is for the same file). stderr adds the remedy for each kind.
 - `secrets doctor` has a section `Projects (projects.toml)`. It warns for each missing path (`→ when the project is gone, run secrets project forget <path>`) and for each duplicate entry (`→ run secrets project identity <name> --mapping <path> (or --clear): it makes the entries one entry`). It removes nothing.
+- `project add` takes a folder or one `secrets.toml`. It follows no symbolic link and does not enter hidden folders, `node_modules`, `dist`, `build`, and other build folders. It stops at 12 folders deep, 50000 folders, 15 seconds, or 1000 files, and adds the files that it found. A new entry has no identity, and a known entry keeps its identity. It prints `added`, `updated`, `known`, or `skipped <reason>` for each file ([[dev-knw-nsec-cli]] § `secrets project add`). An agent can run it.
 - `forget` removes all entries of one file. The path of a link removes only the entry of the link, never the entry of its target. When a word is a project name and also a relative path of another entry, `forget` refuses and removes nothing. An agent does not run `forget`: an entry can hold the project identity.
 
 ## The UI: `secrets ui`
@@ -177,10 +181,13 @@ secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
 
 - **Start.** The operator runs `secrets ui` in a terminal. With no terminal on stdin and stdout, it refuses and starts nothing (`NO_TERMINAL`). The server listens on `127.0.0.1` only, on a random port. The terminal shows one URL: `http://127.0.0.1:<port>/#t=<token>`. Use this `127.0.0.1` URL, not `localhost`: the server accepts no other host name.
 - **The login link.** The token works one time, in the first 60 seconds. The CLI opens the browser with a launch file (mode 600), so the token is in no process argument. With `--no-open`, the operator opens the URL. For a new link, the operator stops `secrets ui` and runs it again. The link is a credential: never send it in a chat or a message.
+- **The projects.** The side bar of the page shows the projects of the project index. When the side bar has no projects ("This machine has no projects yet"), the operator uses "Add projects from a folder" (also in the side bar and in the ⌘K palette): give a folder in the home folder (`~` works), click "Find projects", choose the projects, and click "Add". It does the same as `secrets project add <folder>` (an agent can run that command for the operator). It writes only `projects.toml`.
 - **The identity choice.** After the login, the page asks for an identity of `identities.toml` (`--identity <name>` selects it in advance). The page then reads and writes with the key file of that identity only: no `SOPS_AGE_KEY_FILE`, no `SECRETS_IDENTITY`, and no project identity applies. When `identities.toml` no longer names that key file for the identity, the page locks. With no identity on this machine, the page shows its first setup: it makes the first identity (the default) with a new key or an existing key file.
 - **The lock.** The page locks after 15 minutes with no request (`--idle <minutes>`, 1 to 1440), and when the operator clicks Lock. To unlock, the operator chooses the identity again. The lock and Quit delete the Undo records of the server.
 - **The hidden values.** A list never holds a value. The page shows 8 dots for a hidden value. A reveal gives one value and hides it again after 30 seconds, on blur, and on a change of the selection. Copy works without a reveal, and the page clears the clipboard after 30 seconds when it can. The page compares values ("same as dev") with no reveal. Before each reveal or copy, the server writes one line in `<secrets home>/ui-reveal.log`: the time, the identity, the store, the environment, the name, and show or copy, never the value.
 - **Writes.** Each write of the page uses the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. A write to `prod` or `deploy` needs the typed environment name. An import makes one store commit for each environment. The page changes `secrets.toml`, `secrets.local.toml`, and `.gitignore` with the code of the setup commands; it does not commit the project repository. The terminal shows one line for each write and each sync, with names only.
+- **A part of a write.** A write that changes the store and `secrets.toml` (an import with bind, an added variable, the removal of a variable, an Undo) can stop after one part. Then the page shows `Only a part of the change was saved.` (`PARTIAL_WRITE`) and offers "Undo the saved part" for 60 seconds. The terminal line names the store commits that stay and the file. The store commits stay pushed. To remove a variable, the page changes `secrets.toml` first and unsets the store values after it.
+- **A flagged store name.** The page cannot unset a store name that the secret detector flags, also not with "Remove the variable". The operator uses `secrets unset <name> --env <env>` in a terminal.
 - **Quit.** Ctrl-C in the terminal, Quit in the page, and a closed terminal stop the server.
 
 ## Store URL forms

@@ -60,7 +60,7 @@ The agent rules for identities are in [[dev-knw-nsec-rules]] § Rule 12. The set
 
 ## The project index
 
-`projects.toml` in the secrets home lists the projects of this machine. Each command that loads a `secrets.toml` adds or updates its entry (`secrets setup --print` does not). A command that decrypts records the project only after its key check.
+`projects.toml` in the secrets home lists the projects of this machine. Each command that loads a `secrets.toml` adds or updates its entry (`secrets setup --print` does not). A command that decrypts records the project only after its key check. `secrets project add <folder>` adds the projects under a folder that no command loaded yet: a new entry has no identity, and a known entry keeps its identity ([[dev-knw-nsec-cli]] § `secrets project add`).
 
 - An entry has the path of the `secrets.toml`, the project name, the store name, the project identity (step 4), and the last time that a command loaded the file. It holds no value.
 - `secrets project list` shows each entry with a state: `ok`, `missing` (the path does not exist), `linked` (the path has a symbolic link: its identity does not apply), or `duplicate` (another entry is for the same file, for example another letter case or Unicode form of the path on macOS).

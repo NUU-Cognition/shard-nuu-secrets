@@ -50,7 +50,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    ```
 
    - You never run `secrets ui` yourself, and you never open its page or its login link ([[dev-knw-nsec-rules]] § Rule 11). Way (b) is for the operator only. The page needs an identity in `identities.toml`: with no identity, the page shows its first setup. Way (a) works on each machine.
-   - The page writes with the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. It shows a write error with a fixed text. Read the text that the operator sends with [[dev-sk-nsec-diagnose]].
+   - The page writes with the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. It shows a write error with a fixed text. Read the text that the operator sends with [[dev-sk-nsec-diagnose]]. `Only a part of the change was saved.` (`PARTIAL_WRITE`) means that a part of the write stays: the operator decides about "Undo the saved part" (60 seconds). Then run step 7 again. The page cannot unset a store name that the secret detector flags: for that name, give the operator `secrets unset <name> --env <env>`.
    - `secrets set` uses the identity that the CLI selects for the operator's shell ([[dev-knw-nsec-model]] § Identities and the key selection). Do not add `--identity` to the command unless the operator names the identity.
    - Outside the project folder, the operator adds `--store <local store name>` or `--mapping <path>` to the command.
    - A successful `secrets set` prints `set  <name>  env <env>  store <store> @ <revision>`, or `unchanged  …` when the store already has that value. Both exit 0. Neither shows a value.
