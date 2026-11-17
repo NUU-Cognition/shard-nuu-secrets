@@ -11,7 +11,7 @@ This folder is the remote source of the shard (shorthand `nsec`, package `@nuuco
 The agents use the `secrets` CLI. The operator installs it from npm (Node.js 24 or later):
 
 ```sh
-npm install -g @nuucognition/secrets-cli@0.2.0-beta.0    # the commands secrets and secret
+npm install -g @nuucognition/secrets-cli@0.2.0-beta.1    # the commands secrets and secret
 ```
 
 SOPS, age, and Git are also necessary. gitleaks is optional. `secrets doctor` checks each tool. See `knowledge/dev-knw-nsec-cli.md` § Install.
@@ -48,4 +48,4 @@ Edit the files of this folder. Then build the shard again:
 flint shard build nuu-secrets
 ```
 
-Version 0.7.0 is for npm `@nuucognition/secrets-cli@0.2.0-beta.0`, built from the draft commit `9b7ad5c` of `NUU-Cognition/secrets` (not on canon, which is `633496d`): the CLI of Mission 002 (canon `633496d`) with the change log, `secrets mv`, `secrets refs`, the collections, and the expiry dates. Install it with the exact version (`npm install -g @nuucognition/secrets-cli@0.2.0-beta.0`): the npm tags `beta` and `latest` still give `0.1.0-beta.1`. The command facts come from the README and `apps/secrets-cli/src/commands/` of `9b7ad5c`. Canon `633496d` has no change log, collections, or expiry dates. The npm version `0.1.0-beta.1` has the code of canon `471e270`: it also has no identities, no project index, and no `secrets ui`. When the CLI changes, check each command, option, and message of the knowledge files and the skills again. The release notes are in `RELEASE.md`.
+Version 0.7.1 is for npm `@nuucognition/secrets-cli@0.2.0-beta.1`, built from the draft commit `31ca2d7` of `NUU-Cognition/secrets` (not on canon, which is `633496d`): the CLI of Mission 002 (canon `633496d`) with the change log, `secrets mv`, `secrets refs`, the collections, and the expiry dates (`0.2.0-beta.0`, draft commit `9b7ad5c`), and the check of the SOPS metadata before each decrypt (`0.2.0-beta.1`). Install it with the exact version (`npm install -g @nuucognition/secrets-cli@0.2.0-beta.1`): the npm tag `beta` gives `0.2.0-beta.1` after its publish, and `latest` stays on `0.1.0-beta.1` until the operator moves it. The command facts come from the README and `apps/secrets-cli/src/` of `31ca2d7`. Canon `633496d` has no change log, collections, or expiry dates. The npm version `0.1.0-beta.1` has the code of canon `471e270`: it also has no identities, no project index, and no `secrets ui`. When the CLI changes, check each command, option, and message of the knowledge files and the skills again. The release notes are in `RELEASE.md`.

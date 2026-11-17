@@ -10,7 +10,7 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 
 | Step | Who | Commands |
 |---|---|---|
-| Install the CLI and the tools | Operator | `npm install -g @nuucognition/secrets-cli@0.2.0-beta.0`; SOPS, age, Git, gitleaks |
+| Install the CLI and the tools | Operator | `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1`; SOPS, age, Git, gitleaks |
 | The guided setup | Operator | `secrets setup` (on a terminal) |
 | Show the state of the setup | Agent or operator | `secrets setup --print` (changes nothing) |
 | The key of this machine | Operator | `secrets keygen` |
@@ -33,7 +33,7 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 
 ## Before the setup
 
-- **The CLI.** `npm install -g @nuucognition/secrets-cli@0.2.0-beta.0` gives the commands `secrets` and `secret`. It needs Node.js 24 or later. See [[dev-knw-nsec-cli]] § Install.
+- **The CLI.** `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1` gives the commands `secrets` and `secret`. It needs Node.js 24 or later. See [[dev-knw-nsec-cli]] § Install.
 - **The tools.** SOPS 3.11 or later, `age` and `age-keygen`, and Git are necessary. gitleaks is optional, but without it the CLI does not scan store commits (Rule 10). `secrets doctor` and step 1 of `secrets setup` check each tool and give its install command.
 - **Git access.** The CLI uses Git for the store repository. The machine needs Git access to that repository: an SSH key that the Git host accepts, or a Git credential helper for HTTPS. Never put a credential in a store URL. The CLI refuses an HTTPS URL with user information and an SSH URL with a password.
 - **The repository of a new store.** The CLI does not make the repository. The operator makes an empty private repository on the Git host first (no README, no first commit).

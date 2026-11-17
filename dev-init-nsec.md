@@ -37,7 +37,7 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 1. Never print, log, echo, or type a value. Not in output, a commit message, a Mesh note, a message, a test fixture, or a command.
 2. Never write a value to a file. No `.env` file, no `secrets export … > file`. If a tool needs a file, stop and ask the operator.
 3. Never pass a value as a process argument. A program reads a value from its process environment.
-4. Never read or copy a key file (the key file of each identity, `$SOPS_AGE_KEY_FILE`, `~/.config/sops/age/keys.txt`, and `<secrets home>/keys/`). For the public key, run `secrets keygen --public`. Never decrypt a store file. Never edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `collections.toml`, `metadata.toml`, `changes.jsonl`, `identities.toml`, or `projects.toml`.
+4. Never read or copy a key file (the key file of each identity, `$SOPS_AGE_KEY_FILE`, `~/.config/sops/age/keys.txt`, and `<secrets home>/keys/`). For the public key, run `secrets keygen --public`. Never decrypt a store file. When a read stops with `… has SOPS metadata that the CLI does not decrypt. …`, stop and give the operator the exact message. Never edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `collections.toml`, `metadata.toml`, `changes.jsonl`, `identities.toml`, or `projects.toml`.
 5. Never run `secrets setup` (except `setup --print`), `set`, `edit`, `unset`, `keygen` (except `keygen --public` with no `--file`), `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, `logout`, `identity add|use|rm`, `project identity <name>`, `project identity --clear`, `project forget`, `mv`, `collection create|edit|rename|rm`, `expiry set|clear`, or `refs fix` (except `refs fix --dry-run`), unless the operator asks for or approves that exact command. Never add `--yes` to a push.
 6. Ask the operator for a missing value with the exact command: `secrets set <name> --env <env>`, or the page of `secrets ui`. Then continue with `secret <cmd>`. Never ask for a value in the chat. A moved or removed ref: see 13.
 7. You are a user. You have the access of your operating-system user. The rules prevent accidents. They are not a security boundary.
@@ -59,6 +59,7 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 | `secret` or `secrets` fails, or access is not correct | [[dev-sk-nsec-diagnose]] |
 | A store write stops with the secret scan, or `doctor` warns about gitleaks | [[dev-sk-nsec-diagnose]] (step 10) and [[dev-knw-nsec-rules]] § Rule 10 |
 | `doctor` warns `.gitleaks.toml differs from the text that the CLI generates` | [[dev-sk-nsec-diagnose]] (step 4): give the operator the exact `secrets store fix-config --store <name>` command; never run it |
+| A read stops with `✘ The store file <file> of store <store> has SOPS metadata that the CLI does not decrypt. SOPS did not run, and nothing was read.` (`UNSAFE_STORE`) | Stop. Do not touch the file. [[dev-sk-nsec-diagnose]] (step 4): give the operator the exact message |
 | A value or a key is missing | [[dev-sk-nsec-request_value]] |
 | A command or `doctor` reports an identity problem (`LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, an unknown identity, a parent-identity warning) | Stop. [[dev-sk-nsec-diagnose]] (step 6) and [[dev-knw-nsec-rules]] § Rule 12 |
 | The operator asks about identities, the project index, or `secrets ui` | [[dev-knw-nsec-setup]] § Identities, § The project index, § The UI; give the operator the commands |
@@ -111,4 +112,4 @@ secrets plan <target> --env <env>        # what a push sends: names and statuses
 
 Use the `secrets` command that is on `PATH`. Its build mode (prod or dev) changes the default secrets home. See [[dev-knw-nsec-model]] § The store.
 
-When the shell cannot find `secrets`, do not install it yourself. Ask the operator to install the CLI: `npm install -g @nuucognition/secrets-cli@0.2.0-beta.0` (Node.js 24 or later). See [[dev-knw-nsec-cli]] § Install.
+When the shell cannot find `secrets`, do not install it yourself. Ask the operator to install the CLI: `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1` (Node.js 24 or later). See [[dev-knw-nsec-cli]] § Install.

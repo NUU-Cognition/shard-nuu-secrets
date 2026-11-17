@@ -2,6 +2,16 @@
 
 The notes of each version of the shard `nsec` (`@nuucognition/nuu-secrets`). The notes of the versions before 0.6.0 are in the Git history of this repository.
 
+## 0.7.1
+
+For the CLI patch npm `@nuucognition/secrets-cli@0.2.0-beta.1`, built from the draft commit `31ca2d7` of `NUU-Cognition/secrets` (not on canon, which is `633496d`): the code of `0.2.0-beta.0` with the check of the SOPS metadata before each decrypt (`273da87`). Install it with the exact version: `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1`. The npm tag `beta` gives `0.2.0-beta.1` after its publish; `latest` stays on `0.1.0-beta.1` until the operator moves it.
+
+- **Each install line** names `@0.2.0-beta.1`: the init, the headless init, the CLI reference, the setup guide, and the README. The CLI reference says that `0.2.0-beta.0` has no check of the SOPS metadata.
+- **The new read refusal.** Each decrypt checks the SOPS metadata first. A store file with a key of another system (`hc_vault`, `kms`, `gcp_kms`, `hckms`, `azure_kv`, `pgp`, or `key_groups` that is not empty), an unknown metadata key, a YAML problem, or no SOPS metadata stops the read with `UNSAFE_STORE` before SOPS runs: `✘ The store file <file> of store <store> has SOPS metadata that the CLI does not decrypt. SOPS did not run, and nothing was read.` The agent stops, does not open, edit, or decrypt the file, and gives the operator the exact message: a person changed the store file by hand, or a store writer added a key of another system, and the operator checks the commit.
+  - The CLI reference: the section "The check of the SOPS metadata before each decrypt" (where, what stops the read, the message, its lines and hints, the cause, what an agent does), the `doctor` lines, and a row in "Messages that agents see".
+  - `diagnose`: a Mapping row for the refusal, a Store row for the policy line `the SOPS metadata has "<key>", which the store policy does not allow`, and step 1 (no refresh and no retry).
+  - The headless init: a new blocker. The init: a new Situations row. Rule 4, `run_app`, and the model: the refusal.
+
 ## 0.7.0
 
 For the CLI of npm `@nuucognition/secrets-cli@0.2.0-beta.0`, built from the draft commit `9b7ad5c` of `NUU-Cognition/secrets` (not on canon, which is `633496d`). Install it with the exact version: `npm install -g @nuucognition/secrets-cli@0.2.0-beta.0` (the npm tags `beta` and `latest` still give `0.1.0-beta.1`). It adds the change log, `secrets mv`, the ref check, the collections, and the expiry dates (Notepad 005) to the CLI of canon `633496d`. Canon `633496d` and npm `0.1.0-beta.1` do not have these parts.

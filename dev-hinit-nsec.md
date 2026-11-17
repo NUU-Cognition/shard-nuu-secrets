@@ -17,7 +17,7 @@ The complete rules are in [[dev-knw-nsec-rules]].
 
 1. Never print, log, echo, or type a value. This includes your result, an Orbh message, an update, the `blockers` key, a Mesh note, a commit message, and a test fixture.
 2. Never write a value to a file. Never pass a value as a process argument.
-3. Never read or copy a key file (also the key file of an identity). Never decrypt or edit a store file, `collections.toml`, `metadata.toml`, `changes.jsonl`, `identities.toml`, or `projects.toml`. `secrets keygen --public` (with no `--file`) gives you the public key of the selected key file.
+3. Never read or copy a key file (also the key file of an identity). A read that stops with `… has SOPS metadata that the CLI does not decrypt. …` is a blocker. Never decrypt or edit a store file, `collections.toml`, `metadata.toml`, `changes.jsonl`, `identities.toml`, or `projects.toml`. `secrets keygen --public` (with no `--file`) gives you the public key of the selected key file.
 4. Never run an operator-only command (`secrets setup` except `setup --print`, `set`, `edit`, `unset`, `keygen` except `keygen --public` with no `--file`, `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, `logout`, `identity add|use|rm`, `project identity <name>`, `project identity --clear`, `project forget`, `mv`, `collection create|edit|rename|rm`, `expiry set|clear`, `refs fix` except `refs fix --dry-run`). The one exception: your prompt relays an instruction or an approval of the operator that names that exact command. Never add `--yes` to a push.
 5. Never set `SECRETS_GITLEAKS=0`, and never remove, rename, or hide gitleaks on `PATH`. Before a store write that this shard allows, check for an inherited `SECRETS_GITLEAKS=0`. See [[dev-knw-nsec-rules]] § Rule 10.
 6. You are a user. The rules prevent accidents. They are not a security boundary.
@@ -30,13 +30,14 @@ The complete rules are in [[dev-knw-nsec-rules]].
 
 1. **No interactive prompt.** Never start a command that waits for a person: `secrets setup` (a guided setup on a terminal), `secrets set` (a hidden prompt), `secrets edit` (an editor), `secrets login` (a browser), `secrets ui` (a web page for a person; you never run it, Rule 8 above), or `secrets refs fix` without `--yes` (a question on a terminal; with no terminal it refuses and changes nothing). These are operator commands. `secrets setup --print` waits for nothing: use it to find the setup steps that remain, and put the operator commands of each `todo` step in your blocker ([[dev-knw-nsec-setup]]).
 2. **A blocker goes to a person, never to a guess.** These are blockers:
-   - the shell cannot find `secrets` or `secret` (`command not found`): the operator installs the CLI with `npm install -g @nuucognition/secrets-cli@0.2.0-beta.0` ([[dev-knw-nsec-cli]] § Install). Do not install it, and do not run it with `npx`;
+   - the shell cannot find `secrets` or `secret` (`command not found`): the operator installs the CLI with `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1` ([[dev-knw-nsec-cli]] § Install). Do not install it, and do not run it with `npx`;
    - a value is missing (`✘ <n> variable(s) have no value in env <env> …`, or a `doctor` line `… is not in the store`);
    - `secret` stops with `✘ No usable age key: …`, or `doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`;
    - `--offline` stops with `… has no cached clone on this machine` and the task forbids network access;
    - a `doctor` item that only the operator can fix ([[dev-sk-nsec-diagnose]]);
    - a tool needs a file with values;
    - a push to a platform: only the operator runs `secrets push` ([[dev-sk-nsec-plan_push]]);
+   - a read stops with `✘ The store file <file> of store <store> has SOPS metadata that the CLI does not decrypt. SOPS did not run, and nothing was read.` (`UNSAFE_STORE`): put the exact message and its lines in the blocker. Do not open, edit, or decrypt the file, and do not try another command to get the values ([[dev-sk-nsec-diagnose]], step 4);
    - a store write stops with the secret scan (`SECRET_SCAN_FOUND` or `SECRET_SCAN_FAILED`) or with the store policy (`UNSAFE_STORE` or `UNSAFE_RESULT`: a field name, never a value), or its message has a cleanup line or `Nothing was pushed.` ([[dev-sk-nsec-diagnose]], step 10);
    - the environment of a store write that you may run has `SECRETS_GITLEAKS=0` (the `doctor` line `SECRETS_GITLEAKS=0: the CLI does not scan store commits`);
    - an identity problem: a command or `doctor` reports `LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, `UNKNOWN_IDENTITY` (`✘ There is no identity named …`), `PROJECT_INDEX`, the warning `… has no identity of its own in projects.toml, so the CLI uses …`, or the warning that the identity of a link target does not apply. Put the exact message and the remedy lines of the CLI in the blocker ([[dev-knw-nsec-rules]] § Rule 12);
