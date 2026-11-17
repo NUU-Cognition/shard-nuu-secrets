@@ -1,5 +1,5 @@
 ---
-description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup and the identity changes); how to ask for a value; the secret scan of store commits; agents never use secrets ui; use the identity that the CLI selects and stop on an identity problem; what to do after a leak"
+description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup, the identity changes, and the changes of names, collections, expiry dates, and refs); how to ask for a value; the secret scan of store commits; agents never use secrets ui; use the identity that the CLI selects and stop on an identity problem; moved and removed refs and expiry warnings; what to do after a leak"
 ---
 
 # Knowledge: Agent Rules
@@ -12,8 +12,12 @@ This shard uses one word for one thing.
 
 | Word | Meaning |
 |---|---|
-| value | The plaintext of a secret, for example an API key, a token, or a password. |
+| value | The plaintext of a secret of an environment, for example an API key, a token, or a password. |
 | secret name | The stable name of a value in the store, for example `clerk/secret-key`. A secret name is not secret. |
+| collection | The first segment of a secret name: `openai` in `openai/api-key`. A collection can have a record in `collections.toml` (a description, a source URL, a warning window). A name with one segment is in no collection. |
+| expiry date | The first day on which the key of one secret name in one environment does not work, in `metadata.toml`. The operator sets it. The CLI warns when the date is near (`due`) or past (`expired`). |
+| change log | `changes.jsonl` in the store: one line for each change of a write (a name added, changed, removed, or moved; a collection or expiry change), with the time and the recipient id of the writer. It never holds a value. |
+| moved ref, removed ref | A `secret://` ref of a project that has no value, and that the change log moved to another name (`moved`) or removed (`removed`). |
 | variable | An environment variable of a process, for example `CLERK_SECRET_KEY`. A variable name is not secret. |
 | environment | The store environment that `--env` selects: `dev`, `preview`, `prod`, or `deploy`. |
 | store | The Git repository of the team that holds the encrypted values (SOPS + age). |
@@ -21,8 +25,8 @@ This shard uses one word for one thing.
 | key file | An age private key file of this machine. For each command, the CLI selects one key file: the key file of an identity, `$SOPS_AGE_KEY_FILE`, or `~/.config/sops/age/keys.txt` ([[dev-knw-nsec-model]] § Identities and the key selection). |
 | identity | A name for one key file of this machine, in `identities.toml` of the secrets home. The file holds names and paths, never a key. One machine can have several identities. An identity is not a security boundary between people. |
 | project index | `projects.toml` in the secrets home: the projects of this machine, with the path of each `secrets.toml`, the project name, the store name, and the project identity. It holds no value. |
-| the UI | `secrets ui`: the local web page for the operator. It shows the stores, the projects, and the values (hidden until a reveal). Agents never use it (Rule 11). |
-| store write | A command that changes the store with one Git commit and one push: `secrets store init`, `set`, `unset`, `edit`, `recipient add|rm`, and `store fix-config`. Each store write is an operator command (Rule 5). |
+| the UI | `secrets ui`: the local web page for the operator. It shows the stores, the projects, the collections, the change log, and the values (hidden until a reveal). Agents never use it (Rule 11). |
+| store write | A command that changes the store with one Git commit and one push: `secrets store init`, `set`, `unset`, `edit`, `mv`, `collection create\|edit\|rename\|rm`, `expiry set\|clear`, `recipient add\|rm`, and `store fix-config`, and each write of the page of `secrets ui`. Each store write is an operator command (Rule 5). |
 | secret scan | The gitleaks scan that the CLI runs on the bytes of each store commit before the commit (Rule 10). |
 | operator | The person who owns this machine and its store access. Only the operator enters values and manages keys. |
 
@@ -66,6 +70,7 @@ An app can show a value in its output: debug output, a configuration dump, or an
 - Do not open or show the content of a `.env*` file. This also applies to an example file such as `.env.example`, also when Git tracks it. Any of these files can hold a value, and a file can be a symbolic link to another file. `secrets doctor` names the managed variables in the `.env*` files, and it shows names only. Get the variable names of an app from its source code ([[dev-sk-nsec-setup_project]], step 4).
 - If a tool can read its configuration only from a file, stop. Tell the operator the tool and the file. The operator decides.
 - Never run `vercel env pull`. It writes the values of a Vercel environment to a file.
+- `secret <cmd>` writes no `.env` file. A file with values comes only from a redirect of `secrets export` (for example `--format dotenv > .env.local`), and you never make one. `npx convex dev` writes its own `.env.local` with `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL`: the Convex tool owns these names, and a push never sends them to Convex. Keep them out of `secrets.toml` unless the operator decides otherwise, and do not open or change that file.
 
 ## Rule 3 — Never pass a value as a process argument
 
@@ -80,19 +85,19 @@ Other processes can read the arguments of a process. A program must read a value
 - Do not open, print, copy, move, or change a key file. This applies to each key file of each identity (the `KEY FILE` column of `secrets identity list`) and to each file in `<secrets home>/keys/`. To check the key, run `secrets doctor` (the key selection, the path, the mode, and the fingerprint), `secrets whoami` (the identity, the fingerprint, and the path), `secrets identity list` (the public key of each identity), or `secrets keygen --public` (the full public key of the selected key file; it makes no key). The fingerprint is the last 8 characters of the public key.
 - Do not read or print the variable `SOPS_AGE_KEY`: it can hold a private key. Do not run the command of `SOPS_AGE_KEY_CMD`.
 - Do not decrypt a store file. Do not run `sops` on a store file. An error of `secret` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
-- Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `stores.toml`, `identities.toml`, or `projects.toml` by hand. Do not add an `identity` key to `secrets.local.toml`: a project file never selects an identity, and the CLI ignores the key with a warning (Rule 12).
-- Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` with the commands of Rule 6 (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), not by hand. These commands check the result and refuse a bad change. When a command cannot edit an unusual form of the file (`MAPPING_EDIT`), report it to the operator.
+- Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `collections.toml`, `metadata.toml`, `changes.jsonl`, `stores.toml`, `identities.toml`, or `projects.toml` by hand. Do not add an `identity` key to `secrets.local.toml`: a project file never selects an identity, and the CLI ignores the key with a warning (Rule 12).
+- Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` with the commands of Rule 6 (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), or with `refs fix` after the approval of the operator (Rule 13), not by hand. These commands check the result and refuse a bad change. When a command cannot edit an unusual form of the file (`MAPPING_EDIT`), report it to the operator.
 - Do not run Git commands in a store clone, and do not delete a store clone. Do not delete a `.removing-*` folder in the stores folder: report it to the operator. To refresh a store clone, first run plain `secrets doctor` for that store (Rule 6). Then run `secrets store sync <name>`, or `secrets doctor --online` with the same options.
 - Do not move, link, or replace folders in the secrets home. Managed-clone checks refuse linked folders below the real secrets home. Store-file checks refuse non-regular files. Both refuse a file or a folder that they cannot check (`… cannot check …`, `… cannot be checked (<code>)`). Not every metadata command runs every check. Report each refusal to the operator. Do not change modes to pass a check.
 
 ## Rule 5 — Operator-only commands
 
-The operator enters values and manages keys. Do not run these commands. The one exception: the operator asks you to run that exact command now. (A test of the CLI in a sandbox has its own rule: see [Tests of the CLI itself](#tests-of-the-cli-itself).)
+The operator enters values, manages keys, and owns the names, the collections, and the expiry dates. Do not run these commands. The one exception: the operator asks for that exact command now, or approves it (the approval of the operator). (A test of the CLI in a sandbox has its own rule: see [Tests of the CLI itself](#tests-of-the-cli-itself).)
 
 | Command | What it does |
 |---|---|
 | `secrets setup` (without `--print`) | The guided setup on a terminal. It makes keys and stores and writes values ([[dev-knw-nsec-setup]]). `secrets setup --print` is not on this list (see Rule 6). |
-| `secrets set` | Writes a value. The value comes from a hidden prompt or stdin. |
+| `secrets set` | Writes a value. The value comes from a hidden prompt or stdin. `--expires <date>` also sets its expiry date. |
 | `secrets edit` | Shows the values of one store file in an editor. For preview, it shows only the preview file. |
 | `secrets unset` | Removes a value. |
 | `secrets keygen`, `secrets keygen --out <file>`, `secrets keygen --public --file <path>` | Make an age private key, or read another key file. `secrets keygen --public` with no `--file` is not on this list (see Rule 6). |
@@ -105,10 +110,14 @@ The operator enters values and manages keys. Do not run these commands. The one 
 | `secrets identity add`, `secrets identity use`, `secrets identity rm` | Add an identity (also a new key), change the default identity, or remove an identity. They change the key file that a command uses. See Rule 12. |
 | `secrets project identity <name>`, `secrets project identity --clear` | Set or remove the identity of a project on this machine (in `projects.toml`). `secrets project identity` with no name and no `--clear` only shows it (Rule 6). See Rule 12. |
 | `secrets project forget <name\|path>` | Removes the entries of a project from the project index. An entry can hold the project identity: without it, the default identity applies, and the default can have more access. See Rule 12. |
+| `secrets mv <from> <to>` | Renames a secret in each store file that holds it. Then the refs of the projects that use the old name are `moved`. See Rule 13. |
+| `secrets collection create`, `edit`, `rename`, `rm` | Change a collection record. `rename` also renames each secret of the collection, as `mv` does. See Rule 13. |
+| `secrets expiry set`, `secrets expiry clear` | Set or remove the expiry date of one secret in one environment. See Rule 13. |
+| `secrets refs fix` (without `--dry-run`) | Rewrites each moved ref in `secrets.toml` and `secrets.local.toml`. `secrets refs fix --dry-run` is not on this list (see Rule 6). See Rule 13. |
 
 `secrets ui` is not on this list: an agent never runs it, also when the operator asks (Rule 11).
 
-"The operator asks" means: the operator (or your dispatcher, for the operator) names this command for this action in this session. A general task, for example "set up the secrets of the app", does not give this permission.
+"The operator asks" and "the approval of the operator" mean: the operator (or your dispatcher, for the operator) names this command, with its arguments, for this action in this session. A general task, for example "set up the secrets of the app" or "fix the refs", does not give this permission.
 
 This exception never covers `--yes` on a push to production, unless the operator gives that exact command with `--yes`.
 
@@ -130,7 +139,12 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 | `secrets project add <path>` | Add the projects under a folder (or one `secrets.toml`) to the project index. It writes only `projects.toml`, as each command that loads a `secrets.toml`: a new entry has no identity, and a known entry keeps its identity. It changes no project file, and it reads no store and no value. Run it with `--dry-run` first. |
 | `secrets project identity` (no name, no `--clear`) | Show the identity of the project of the current folder (or of `--mapping <path>`). It changes nothing. |
 | `secrets store list` | List the store clones of this machine (no values). |
-| `secrets store sync <name>` | Refresh one store clone that a plain `secrets doctor` checked first. Always name the store. |
+| `secrets store sync <name>` | Refresh one store clone that a plain `secrets doctor` checked first. Always name the store. It also shows the change-log entries since the last sync, the refs of the projects of this machine that they break, and the due and expired secrets. |
+| `secrets log` | Show the change log of the store: names, environments, dates, and the recipient id of each writer. No value, and no key needed. |
+| `secrets refs` | Show the state of each ref of the project (or with `--all`, of each project of the project index): `ok`, moved, removed, or not in the store. No key needed. See Rule 13. |
+| `secrets refs fix --dry-run` | Show the plan of the ref fix. It changes nothing. Without `--dry-run`, `refs fix` needs the approval of the operator (Rule 5). |
+| `secrets collection list` | List the collections: the record, the number of names in each environment, the warning window, and the next expiry date. No key needed. |
+| `secrets expiry list` | List the expiry dates with their state (`ok`, `due`, `expired`). No key needed. |
 | `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secret` without `--offline` clones the store when necessary. |
 | `secrets setup --print` | Show the state of each setup step and the commands that remain. It changes nothing. See [[dev-knw-nsec-setup]]. |
 | `secrets vars` | List the variable names that the code reads, and their mapping state. Names and paths only. |
@@ -154,7 +168,7 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 
 ## Rule 7 — Ask the operator for values and keys
 
-When a value or a key is missing, ask the operator. Give the variable, the secret name, the environment, and the exact command for the operator. The operator sets a value with `secrets set <name> --env <env>` in their own terminal, or in the page of `secrets ui` (Rule 11). Then you continue with `secret <cmd>`. Never ask the operator to paste a value into the chat, a file, or a message. Never guess a value, and never use a placeholder value that looks real. Use [[dev-sk-nsec-request_value]].
+When a value or a key is missing, ask the operator. Give the variable, the secret name, the environment, and the exact command for the operator. A missing ref with a `moved` or `removed` hint is not a missing value: follow Rule 13. The operator sets a value with `secrets set <name> --env <env>` in their own terminal, or in the page of `secrets ui` (Rule 11). Then you continue with `secret <cmd>`. Never ask the operator to paste a value into the chat, a file, or a message. Never guess a value, and never use a placeholder value that looks real. Use [[dev-sk-nsec-request_value]].
 
 ## Rule 8 — Platform targets need the operator
 
@@ -203,10 +217,10 @@ In a headless session, a scan refusal and an inherited `SECRETS_GITLEAKS=0` are 
 
 ## Rule 11 — The UI (`secrets ui`) is for the operator
 
-`secrets ui` starts a local web page on `127.0.0.1`. The page shows the stores, the projects, and the values of this machine. A reveal or a copy in the page gives a value. Thus the UI is for a person at a terminal, never for an agent.
+`secrets ui` starts a local web page on `127.0.0.1`. The page shows the stores, the projects, the collections, the change log, and the values of this machine. A reveal or a copy in the page gives a value. Thus the UI is for a person at a terminal, never for an agent.
 
 - **Never run `secrets ui`.** This applies to each option (`--no-open`, `--identity`, `--idle`), and also when the operator asks. With no terminal, the CLI refuses: `✘ secrets ui needs a terminal on stdin and stdout: the UI is for a person at a terminal. Nothing was started.` (`NO_TERMINAL`). Do not give it a terminal (a pseudo-terminal, `script`, `expect`, `tmux`, or a terminal tool of your harness).
-- **Never read values from the UI.** Do not open the URL or the login link of the UI. Do not open the page in a browser or in a browser tool. Do not send a request to its server or its API (`curl`, `fetch`, or another HTTP client to `127.0.0.1:<port>`). Do not read its launch file: it holds the login token.
+- **Never read values from the UI.** This also applies to the actions of the page (for example "Fix the refs" and the expiry form). Do not open the URL or the login link of the UI. Do not open the page in a browser or in a browser tool. Do not send a request to its server or its API (`curl`, `fetch`, or another HTTP client to `127.0.0.1:<port>`). Do not read its launch file: it holds the login token.
 - **A login link is a credential.** The link has the form `http://127.0.0.1:<port>/#t=<token>`. When the operator sends you a link of this form, do not open it, and do not repeat the token. Tell the operator that the link is now in the session transcript. The token works one time, in the first 60 seconds. For a new link, the operator stops `secrets ui` and runs it again.
 - **The reveal log is for the operator.** `<secrets home>/ui-reveal.log` holds one line for each reveal or copy: the time, the identity, and the store, the environment, and the name (for a literal: the project and the variable), never the value. Do not change or delete it.
 - **What you do.** You use `secret <cmd>` to run a program with the values. You ask the operator to set a value in the UI or with `secrets set` ([[dev-sk-nsec-request_value]]). The writes of the page are operator writes: they use the write path of the CLI (the lock, the policy check, the secret scan, the commit, and the push). When the operator sends you an error of the page, read it as a message of the CLI ([[dev-sk-nsec-diagnose]]).
@@ -235,6 +249,21 @@ The CLI selects one key file for each command. The selection order is in [[dev-k
 - **An identity is not a security boundary.** Each process of your operating-system user can read each key file and change `identities.toml` and `projects.toml`. The rules prevent accidents ([An agent is a user](#an-agent-is-a-user)).
 
 In a headless session, an identity problem is a blocker. See [[dev-hinit-nsec]].
+
+## Rule 13 — Moved refs, collections, and expiry dates
+
+The change log records each change of a store write. The CLI uses it to explain a missing ref. The operator owns the secret names, the collections, and the expiry dates.
+
+- **You can read them.** `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets collection list`, and `secrets expiry list` show names, environments, dates, and recipient ids, never a value (Rule 6).
+- **A change needs the approval of the operator.** `secrets mv`, `secrets collection create|edit|rename|rm`, `secrets expiry set|clear`, and `secrets refs fix` (without `--dry-run`) (Rule 5). Each of them except `refs fix` is a store write: check for an inherited `SECRETS_GITLEAKS=0` first (Rule 10).
+- **A moved ref.** The error of a missing value, a `doctor` line, a `plan` line, or `secrets refs` says ``moved to secret://<new name> on <date> by <recipient id>; run `secrets refs fix` ``. The CLI never uses the value of the new name: the project file must change first. Run `secrets refs fix --dry-run` with the same `--mapping`, `--project`, or `--all`. Give the operator the plan, and ask for the approval of the fix. Change the files only after the approval ([[dev-sk-nsec-diagnose]], step 7). Do not edit the ref by hand, do not `bind` the new name yourself, and do not run the program from another folder or with another `--mapping` to pass the check.
+- **A removed ref.** The hint says `removed on <date> by <recipient id>` (or `moved to …, then removed on …`). The store has no value for that name now. Ask the operator what to do: bind another name, remove the entry, or write a new value. Do not decide it yourself: do not `unbind` the entry, do not bind another name, and do not mark the entry `optional`.
+- **A ref that is not in the store** with no change-log entry is a missing value (Rule 7).
+- **A push.** `plan` and `push` stop on a moved ref, also on an `optional` ref. The refs change first (with the approval of the operator), then the plan.
+- **An expiry warning.** `secret <cmd>`, `run`, `export`, `doctor`, and `store sync` warn when the expiry date of a secret is near (`due`) or past (`expired`), for example ``secrets: warning: <VAR> (secret://<name>, <env>) expires on <date> (in <n> days). Rotate the key, then run `secrets expiry set <name> --env <env> --date <new date>`.`` The warning does not stop the command. Tell the operator the variable, the secret name, the environment, and the date. Do not run `secrets expiry set` or `secrets expiry clear`, and do not change a date to stop a warning. The operator replaces the key at its provider, then writes the new value and its date (`secrets set <name> --env <env> --expires <date>`). An `expired` key can make the program fail with an authentication error: report the warning with the failure. Never read the value to check it.
+- **A move changes refs.** `secrets mv` and `secrets collection rename` change secret names. After such a change, the refs of the projects that use the old names are `moved`.
+
+In a headless session, a moved ref and a removed ref are blockers. An expiry warning is not a blocker: put it in your result. See [[dev-hinit-nsec]].
 
 ## Tests of the CLI itself
 

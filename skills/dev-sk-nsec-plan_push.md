@@ -1,5 +1,5 @@
 ---
-description: "Prepare a push to a platform (Vercel, Convex, Railway): run secrets plan, act on its statuses and errors, request the credentials, and give the operator the exact plan and push commands; never run push and never add --yes"
+description: "Prepare a push to a platform (Vercel, Convex, Railway): run secrets plan, act on its statuses and errors (also a moved ref), request the credentials, and give the operator the exact plan and push commands; never run push and never add --yes"
 ---
 
 > [!important] THIS FILE IS AN INSTRUCTION. WHEN REFERENCED IT IS MEANT TO BE TAKEN AS AN ACTION.
@@ -44,7 +44,8 @@ Prepare the delivery of the variables of one environment to a platform. You run 
 
    - `set <VAR> ← <name>` or `← literal`: the push sends this variable. `remove <VAR> ← <name> (empty, optional)`: the push removes the variable from the platform. On Railway, a removal has the note `Railway can start a deployment for a removal`.
    - `error …` lines:
-     - a required `ref` with no value or an empty value: request the value with [[dev-sk-nsec-request_value]] (`secrets set <name> --env <env>`);
+     - ``<VAR> ← <name>: no value in env <env>: moved to secret://<new name> on …; run `secrets refs fix` ``: the change log moved the name. This error comes also for an `optional` entry: a push never removes the variable of the platform because a secret has a new name. Do not request a value. Use [[dev-sk-nsec-diagnose]] (step 7): the operator approves the ref fix first, then run the plan again;
+     - a required `ref` with no value or an empty value: request the value with [[dev-sk-nsec-request_value]] (`secrets set <name> --env <env>`). When the line has the hint `removed on …`, ask the operator what to do instead ([[dev-knw-nsec-rules]] § Rule 13);
      - an empty literal: report it; the operator decides the mapping;
      - `targets.railway.environments has no entry for env <env>: …`: report it; the operator decides the Railway environment (Rule 8);
      - `this machine cannot open deploy.enc.yaml: …`: see `no access` above.

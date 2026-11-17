@@ -1,5 +1,5 @@
 ---
-description: "Diagnose a NUU Secrets failure from what the CLI reports: run secrets doctor, act on each warn and fail (what an agent fixes, what goes to the operator), stop on an identity problem (LINKED_MAPPING, MAPPING_CHANGED, OUTSIDE_PROJECT, DUPLICATE_PROJECT, an unknown identity, the parent-identity warning), read secrets whoami, identity list, project list, store list, and store sync, add a missing project with project add, and read a refusal of a store write by the secret scan"
+description: "Diagnose a NUU Secrets failure from what the CLI reports: run secrets doctor, act on each warn and fail (what an agent fixes, what goes to the operator), stop on an identity problem (LINKED_MAPPING, MAPPING_CHANGED, OUTSIDE_PROJECT, DUPLICATE_PROJECT, an unknown identity, the parent-identity warning), act on a moved or removed ref (refs fix --dry-run, then a question to the operator) and on an expiry warning, read secrets whoami, identity list, project list, store list, and store sync, add a missing project with project add, and read a refusal of a store write by the secret scan"
 ---
 
 > [!important] THIS FILE IS AN INSTRUCTION. WHEN REFERENCED IT IS MEANT TO BE TAKEN AS AN ACTION.
@@ -18,12 +18,12 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
 
 # Actions
 
-1. **Read the rules.** You read [[dev-knw-nsec-rules]]. Never run `sops`, never open the key file, and never open a store file to diagnose. If the input is a refused store write, a cleanup warning, or a `Nothing was pushed.` message, skip steps 2–8. Follow step 9, then step 10. Use plain `secrets doctor` with the same store, mapping, and environment options. Do not run `store sync`, `doctor --online`, or another command that refreshes this clone before the operator approves the repair. If the shell cannot find `secrets` (`command not found`), stop. Give the operator the install command of [[dev-knw-nsec-cli]] § Install. Do not install the CLI yourself. On a machine that has no key or no store yet, run `secrets setup --print` (it changes nothing), and follow [[dev-knw-nsec-setup]]: give the operator the operator commands of each `todo` step.
+1. **Read the rules.** You read [[dev-knw-nsec-rules]]. Never run `sops`, never open the key file, and never open a store file to diagnose. If the input is a refused store write, a cleanup warning, or a `Nothing was pushed.` message, skip steps 2–9. Follow step 10, then step 11. Use plain `secrets doctor` with the same store, mapping, and environment options. Do not run `store sync`, `doctor --online`, or another command that refreshes this clone before the operator approves the repair. If the shell cannot find `secrets` (`command not found`), stop. Give the operator the install command of [[dev-knw-nsec-cli]] § Install. Do not install the CLI yourself. On a machine that has no key or no store yet, run `secrets setup --print` (it changes nothing), and follow [[dev-knw-nsec-setup]]: give the operator the operator commands of each `todo` step.
 2. **Read the cached state first, then refresh.** Run plain `secrets doctor` with the mapping, store, and environment options for this task. Keep its lines about unpushed commits, changed files, and links. Use `secrets store list` to match the mapping URL to its local store name. When the network is available, refresh only that store:
    ```sh
    secrets store sync <local store name>
    ```
-   It fetches that clone and resets it to the remote. It also reports recipient changes (step 8). Then run plain `secrets doctor` with the same options. If the task covers more stores, check each store before you refresh it. Do not use an unnamed sync after a doctor that checked only one store.
+   It fetches that clone and resets it to the remote. It also reports recipient changes and the change-log lines (step 9). Then run plain `secrets doctor` with the same options. If the task covers more stores, check each store before you refresh it. Do not use an unnamed sync after a doctor that checked only one store.
 3. **Run the checks.** In the project folder, run:
    ```sh
    secrets doctor
@@ -33,7 +33,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    - Outside the project folder, add `--mapping <path>` or `--project <name>`.
    - Add `--env <env>` (one or more times) to check only some environments. The default is `dev`, `preview`, and `prod`.
    - The exit status is 1 when a check fails. The last line counts the results. An exit status 0 can still have `warn` and `skipped` lines.
-4. **Act on each `fail`, `warn`, and important `skipped` line.** A check can have a remedy line (`→ …`). Use this table to decide who acts. "Operator" means: do not do it yourself; put it in the report of step 10.
+4. **Act on each `fail`, `warn`, and important `skipped` line.** A check can have a remedy line (`→ …`). Use this table to decide who acts. "Operator" means: do not do it yourself; put it in the report of step 11.
 
    | Section | Message (start) | Who acts | Action |
    |---|---|---|---|
@@ -69,7 +69,11 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    | Store | `the clone has no commit`, `The clone of store <name> is missing` | Operator | Give the message and the secrets home. Do not delete or edit a clone. |
    | Store | `the store of the mapping is not cloned on this machine` | Agent | When the task allows network access, run the app with `secret <cmd>` (without `--offline`) or run `secrets store clone <url>`. `doctor --online` does not clone. First check that the secrets home is the intended one ([[dev-knw-nsec-model]] § The store). |
    | Stores | `there is no store on this machine` | Operator | With no mapping, the operator decides which store to clone or create. |
-   | Mapping | `<env>: <VAR> → secret://<name> is not in the store` | Operator | Request the value with [[dev-sk-nsec-request_value]]. For `preview`, a dev value is enough. |
+   | Mapping | `<env>: <VAR> → secret://<name> is not in the store` (no hint) | Operator | Request the value with [[dev-sk-nsec-request_value]]. For `preview`, a dev value is enough. |
+   | Mapping | ``<env>: <VAR> → secret://<name> is not in the store: moved to secret://<new name> on <date> by <recipient id>; run `secrets refs fix` `` (`fail`, or `warn` for an `optional` entry) | Agent, then operator | Do not request a value. Follow step 7. |
+   | Mapping | `<env>: <VAR> → secret://<name> is not in the store: removed on <date> by <recipient id>` (`fail`, or `warn` for an `optional` entry) | Operator | Follow step 7. The operator decides. |
+   | Mapping | `warn  <env>: <VAR> → secret://<name> expires on <date> (in <n> days)` or `… expired on <date> (<n> days ago)` | Operator | Report the variable, the secret name, the environment, and the date. Never run the `secrets expiry set` remedy ([[dev-knw-nsec-rules]] § Rule 13). |
+   | Mapping | `warn  <env>: metadata.toml cannot be read; the expiry dates are not checked` | Operator | Give the line. Do not open `metadata.toml`. |
    | Mapping | `<env>: no access (this machine is not in group <group>)` (skipped) | — | Normal when this machine does not need that environment. Report it only when the task needs that environment. |
    | Mapping | `<env>: sops decrypt failed …` | Operator | SOPS did not decrypt the file with the available key sources. This error does not prove that the selected key file is valid. Give the line. See the Key and Store rows. |
    | Mapping | `<VAR> goes to convex: a NEXT_PUBLIC_ variable is for the browser build` | Agent | Remove only `convex` from the targets of that entry. Keep the rest. See step 5. |
@@ -102,7 +106,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    - Run `secrets doctor` again. The `warn` for this variable must be gone.
 
 6. **Read the identity, and stop on an identity problem.** The CLI selects one key file for each command ([[dev-knw-nsec-model]] § Identities and the key selection). Use that selection: do not add `--identity`, and do not set `SECRETS_IDENTITY` or `SOPS_AGE_KEY_FILE`, unless the operator names the identity ([[dev-knw-nsec-rules]] § Rule 12).
-   - **Stop on these problems.** When a command or `doctor` reports `LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, `UNKNOWN_IDENTITY` (`✘ There is no identity named …`), `PROJECT_INDEX` (`✘ The CLI cannot read the identity of project …`), the warning `secrets: warning: <path> has no identity of its own in projects.toml, so the CLI uses …`, or the warning that the identity of a link target does not apply, stop the work that needs the key. Copy the exact message and its remedy lines (`Next:`, `Or:`, the other hint lines, or the `→` line) into the report of step 10. The message starts are in [[dev-knw-nsec-cli]] § Messages that agents see. Do not apply a remedy yourself: no `--identity`, no `secrets project identity <name>` or `--clear`, no `secrets project forget`, no change of a link, and no run from another folder or with another `--mapping` to pass the check. The operator decides. In a headless session, this is a blocker ([[dev-hinit-nsec]]).
+   - **Stop on these problems.** When a command or `doctor` reports `LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, `UNKNOWN_IDENTITY` (`✘ There is no identity named …`), `PROJECT_INDEX` (`✘ The CLI cannot read the identity of project …`), the warning `secrets: warning: <path> has no identity of its own in projects.toml, so the CLI uses …`, or the warning that the identity of a link target does not apply, stop the work that needs the key. Copy the exact message and its remedy lines (`Next:`, `Or:`, the other hint lines, or the `→` line) into the report of step 11. The message starts are in [[dev-knw-nsec-cli]] § Messages that agents see. Do not apply a remedy yourself: no `--identity`, no `secrets project identity <name>` or `--clear`, no `secrets project forget`, no change of a link, and no run from another folder or with another `--mapping` to pass the check. The operator decides. In a headless session, this is a blocker ([[dev-hinit-nsec]]).
    - **Collect the public facts for the report.** Run `secrets identity list` (the identities, their public keys, the key file paths and states, the stores and groups of each identity, and the `active:` line), `secrets project list` (the project index and the state of each entry), and `secrets project identity` in the project folder (the project identity; it changes nothing). None of them shows a private key or a value. Do not open a key file that they name.
    - **`secrets project list` states.** `ok`: normal. `missing`: the path does not exist (the operator can run `secrets project forget <path>`). `linked`: the path has a symbolic link, so its identity does not apply (the operator can run `secrets project identity --clear --mapping <path>`). `duplicate`: another entry is for the same file (the operator runs `secrets project identity <name> --mapping <path>` or `secrets project forget <path>`). Each remedy is an operator command.
    - **A missing project.** When `secrets project list` is empty or does not show a project of the task, add it to the project index. First run `secrets project add <folder> --dry-run` (the project folder, or a folder above it, for example a monorepo). Read the lines (`add`, `update`, `known`, `skipped <reason>`). Then run the same command without `--dry-run`. It writes only `projects.toml`: it reads no store and no value, and it sets no identity ([[dev-knw-nsec-cli]] § `secrets project add`). Report each `skipped` line. For `duplicate` and `linked`, give the operator the remedy of the states above. When the search stops at a limit, give a smaller folder.
@@ -116,19 +120,40 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    - A `store` row ``<name>  cannot read the clone (run `secrets doctor`)`` means that a clone file cannot be read. Run `secrets doctor`.
    - The `Account` part is optional. "Not logged in" and ``Run `secrets login` to authenticate.`` are not a problem. No command needs a login, and `login` is an operator command.
    - For the full public key of this machine, run `secrets keygen --public`. It makes no key.
-7. **List the store clones.** Run `secrets store list`.
+7. **Act on a moved or a removed ref.** The change log explains a missing ref ([[dev-knw-nsec-model]] § The change log and moved refs). The hint is in the error of `secret <cmd>`, `run`, or `export` (``- <VAR> → secret://<name>: moved to …`` or `… removed on …`), in a `doctor` line (step 4), in a `plan` error line, or in `secrets refs`. The CLI never uses the value of the new name. Do not request a value for a moved or removed ref ([[dev-knw-nsec-rules]] § Rule 13).
+   - **See all refs.** Run `secrets refs` in the project folder (or with the `--mapping` or `--project` of the task). Run `secrets refs --all` when the task covers the projects of this machine. Each row is `ok`, moved, removed, or `not in the store (no change-log entry)`. A ref that is not in the store with no change-log entry is a missing value: use [[dev-sk-nsec-request_value]].
+   - **A moved ref.** Run `secrets refs fix --dry-run` with the same options. It changes nothing. Give the operator the plan (each file, each variable, the old ref, and the new ref) and ask for the approval of the fix:
+     ```text
+     The store renamed secrets that this project uses (secrets refs fix --dry-run):
+       <file>
+         <VAR>  secret://<old name> → secret://<new name>
+     The change log: moved on <date> by <recipient id>.
+     Approve the fix? Then I run: secrets refs fix --yes <the same options>
+     Or run in your own terminal: secrets refs fix <the same options>
+     ```
+     After the approval, run `secrets refs fix --dry-run` again. When the plan is the same, run `secrets refs fix --yes` with the same options. When the plan is different, ask again. Then run the failed command again, and commit the changed `secrets.toml` with the normal commit process of the repository (never `secrets.local.toml`). Do not edit the ref by hand, do not `bind` the new name yourself, and do not run from another folder or with another `--mapping` to pass the check.
+   - **A removed ref.** Report the variable, the old name, and the hint (`removed on <date> by <recipient id>`). Ask the operator what to do: bind another secret name, remove the entry, or write a new value under the old name. Do not decide it yourself.
+   - **A moved name with no value.** The hint ` (it has no value in this store either)` means that the new name also has no value. After the fix, the value request of [[dev-sk-nsec-request_value]] follows.
+   - **A push.** `plan` and `push` stop on a moved ref, also on an `optional` ref. The fix comes first, then a new plan ([[dev-sk-nsec-plan_push]]).
+   - **`refs fix` messages.** `secrets: <file> has a symbolic link in its path (…). It was not changed. …`: use the real path of the project, or report it. `secrets: <VAR> in <file> changed after the check. It was not changed.`: run `--dry-run` again. `✘ <n> of <m> ref(s) were not changed.` (`PARTIAL_FIX`): report each stderr line.
+   - In a headless session, a moved ref and a removed ref are blockers ([[dev-hinit-nsec]]). Put the plan of `--dry-run` in the blocker.
+8. **List the store clones.** Run `secrets store list`.
    - Each row is `NAME`, `REVISION`, `URL`.
    - `missing` means that the clone folder is gone. `invalid clone folder` and `invalid entry` mean a damaged clone or a damaged `stores.toml`. These go to the operator. Do not edit `stores.toml`.
    - `secrets: there is no store on this machine` means that no store is cloned in this secrets home.
    - A folder `.removing-<name>-<random>` in the stores folder is the rest of a failed `store remove`. Report it to the operator. Do not delete it.
    - An unwanted clone (for example in the wrong secrets home) goes to the operator: only the operator runs `secrets store remove <name>`.
-8. **Read the output of `secrets store sync <local store name>`.**
+9. **Read the output of `secrets store sync <local store name>`.**
    - `<store>  up to date @ <revision>` or `<store>  <old> → <new>`: normal.
    - `secrets: store <name> had <n> unpushed commit(s) from an interrupted command. They are removed; …` or `secrets: store <name> had changed files from an interrupted command. They are removed.`: the refresh reset the clone. Report it. Any refresh can print these lines (`secret`, `export`, `store sync`, `doctor --online`).
    - `The history of the remote changed (a forced push).`: tell the operator.
+   - ``<n> change(s) of secrets since the last sync (see `secrets log`):``, with one line `<date> <time> UTC  <writer>  <change>` for each change: the change-log lines since the last sync. Names only. Copy them into your report when the task needs them.
+   - `<n> ref(s) of the projects of this machine use a name that these changes moved or removed:` with one line for each ref and `Next: secrets refs --all, then secrets refs fix --all`: follow step 7.
+   - The `due` and `expired` secrets of the store: report them to the operator ([[dev-knw-nsec-rules]] § Rule 13).
+   - `secrets: warning: <n> new line(s) of changes.jsonl in store <store> cannot be read. They are not shown.`: report it. Do not open `changes.jsonl`.
    - `recipients.toml changed in <n> commit(s) since the last sync:` with `+`, `-`, or `~` lines: a recipient was added, removed, or changed. Copy these lines (ids, groups, fingerprints, and authors are public) into your report for the operator.
    - `secrets: store <name>: <message>` and `<n> of <m> store(s) did not sync.`: the sync of that store failed. Give the exact line. The cause can be the network, the remote, the local clone, a link below the secrets home, or the configuration. Retry once. Then report.
-9. **Read a refusal of a store write.** A store write is an operator command. You see its output when the operator sends it to you, or when you run an exact write command that the operator gave you. Use [[dev-knw-nsec-rules]] § Rule 10 and [[dev-knw-nsec-cli]] § The secret scan of store commits. The text output does not print the code: identify it from the start of the message.
+10. **Read a refusal of a store write.** A store write is an operator command. You see its output when the operator sends it to you, or when you run an exact write command that the operator gave you. Use [[dev-knw-nsec-rules]] § Rule 10 and [[dev-knw-nsec-cli]] § The secret scan of store commits. The text output does not print the code: identify it from the start of the message.
    - `✘ The secret scan (gitleaks) found <n> possible secret(s) …` (`SECRET_SCAN_FOUND`): stop and report `SECRET_SCAN_FOUND`. Report only the safe count, rule labels, and file labels from the CLI. Preserve any cleanup warning. Do not open the matching line. Do not bypass or repeatedly retry the finding. A finding in an encrypted file can indicate plaintext metadata, modified tooling, or a false positive. Run `secrets doctor` and report the result. Only the operator decides whether a finding is a false positive.
    - `✘ The secret scan (gitleaks) of the change to store <store> did not complete: <reason>.` (`SECRET_SCAN_FAILED`), with `Next: secrets doctor` and `Then run the command again. Do not bypass a failed scan.`: run `secrets doctor` and report the fixed failure reason. Preserve any cleanup warning. Do not bypass a failed scan.
    - `✘ A file of store <store> breaks the store policy. …` (`UNSAFE_STORE`) or `✘ The result of a SOPS write breaks the store policy. …` (`UNSAFE_RESULT`), with a line such as `- dev.enc.yaml: line <n>: the SOPS metadata field "<field>" does not have the form that SOPS writes`: report the file label, the line number, and the field name. Do not retry the write. Do not open the store file. The hint ``Check the SOPS version (`sops --version`).`` is for the operator.
@@ -136,7 +161,7 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
    - `secrets: gitleaks is not on PATH, so the secret scan of the store commit did not run. …`: the scan did not run. Check the command's exit status. If the command succeeded, the write was made without a scan. Report both facts. Ask the operator to install gitleaks.
    - Another fixed error of a store write (`UNSAFE_FILE`, also `… has a file that the CLI cannot check …`, `COMMIT_FAILED`, `WRITE_FAILED`, or `COMMIT_MISMATCH`; the message starts are in the table of [[dev-knw-nsec-cli]] § The messages of a store write): give the fixed text to the operator. Do not change the store clone.
    - Never set `SECRETS_GITLEAKS=0`, and never remove, rename, or hide gitleaks on `PATH` to pass the write. Before you run a write command that the operator gave you, check for an inherited `SECRETS_GITLEAKS=0` ([[dev-knw-nsec-rules]] § Rule 10).
-10. **Report.** Write one report with:
+11. **Report.** Write one report with:
     - What you fixed, and the `doctor` result after your fixes.
     - Each item for the operator: the message, the exact command for the operator, and why.
     - Never a value. Names, ids, public keys, fingerprints, paths, and revisions are public.
@@ -146,4 +171,4 @@ Find what NUU Secrets reports, fix the parts that an agent may fix, and send the
 
 - What the CLI reports about the failure (observations, not guesses)
 - The agent fixes done, with a `secrets doctor` result after them
-- A report for the operator with each remaining item and its exact command
+- A report for the operator with each remaining item and its exact command (also the plan of `secrets refs fix --dry-run` for a moved ref, each removed ref, and each expiry warning)

@@ -1,5 +1,5 @@
 ---
-description: "The setup of NUU Secrets for an operator: the install, Git access, the guided setup secrets setup and setup --print, a new store for a new team, a new machine for a store, a project, identities (the least access as the default), the project index, the local web page secrets ui (operator only), the accepted store URL forms, and which steps an agent can do"
+description: "The setup of NUU Secrets for an operator: the install, Git access, the guided setup secrets setup and setup --print, a new store for a new team, a new machine for a store, a project, identities (the least access as the default), the project index, collections, expiry dates, the change log and the ref fix, the local web page secrets ui (operator only), the accepted store URL forms, and which steps an agent can do"
 ---
 
 # Knowledge: The Setup for an Operator
@@ -10,7 +10,7 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 
 | Step | Who | Commands |
 |---|---|---|
-| Install the CLI and the tools | Operator | `npm install -g @nuucognition/secrets-cli@beta`; SOPS, age, Git, gitleaks |
+| Install the CLI and the tools | Operator | `npm install -g @nuucognition/secrets-cli@0.2.0-beta.0`; SOPS, age, Git, gitleaks |
 | The guided setup | Operator | `secrets setup` (on a terminal) |
 | Show the state of the setup | Agent or operator | `secrets setup --print` (changes nothing) |
 | The key of this machine | Operator | `secrets keygen` |
@@ -25,12 +25,15 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 | Show the identities and the project index | Agent or operator | `secrets identity list`, `secrets project list`, `secrets project identity` |
 | Add the projects of a folder to the project index | Agent or operator | `secrets project add <folder>` (first with `--dry-run`), or "Add projects from a folder" in the page of `secrets ui` (operator) |
 | Remove a project from the project index | Operator | `secrets project forget <name\|path>` |
+| Show the change log, the refs, the collections, and the expiry dates | Agent or operator | `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets collection list`, `secrets expiry list` |
+| Rename a secret, change the collections, set the expiry dates | Operator (an agent only with the approval of the operator) | `secrets mv`, `secrets collection create\|edit\|rename\|rm`, `secrets expiry set\|clear`, `secrets set … --expires <date>` |
+| Fix the moved refs of the projects | Operator (an agent only with the approval of the operator) | `secrets refs fix` |
 | The local web page | Operator only (never an agent) | `secrets ui` |
 | Check | Agent or operator | `secrets doctor` |
 
 ## Before the setup
 
-- **The CLI.** `npm install -g @nuucognition/secrets-cli@beta` gives the commands `secrets` and `secret`. It needs Node.js 24 or later. See [[dev-knw-nsec-cli]] § Install.
+- **The CLI.** `npm install -g @nuucognition/secrets-cli@0.2.0-beta.0` gives the commands `secrets` and `secret`. It needs Node.js 24 or later. See [[dev-knw-nsec-cli]] § Install.
 - **The tools.** SOPS 3.11 or later, `age` and `age-keygen`, and Git are necessary. gitleaks is optional, but without it the CLI does not scan store commits (Rule 10). `secrets doctor` and step 1 of `secrets setup` check each tool and give its install command.
 - **Git access.** The CLI uses Git for the store repository. The machine needs Git access to that repository: an SSH key that the Git host accepts, or a Git credential helper for HTTPS. Never put a credential in a store URL. The CLI refuses an HTTPS URL with user information and an SSH URL with a password.
 - **The repository of a new store.** The CLI does not make the repository. The operator makes an empty private repository on the Git host first (no README, no first commit).
@@ -171,9 +174,28 @@ secrets project forget ./apps/web         # a path: a secrets.toml or its folder
 - `project add` takes a folder or one `secrets.toml`. It follows no symbolic link and does not enter hidden folders, `node_modules`, `dist`, `build`, and other build folders. It stops at 12 folders deep, 50000 folders, 15 seconds, or 1000 files, and adds the files that it found. A new entry has no identity, and a known entry keeps its identity. It prints `added`, `updated`, `known`, or `skipped <reason>` for each file ([[dev-knw-nsec-cli]] § `secrets project add`). An agent can run it.
 - `forget` removes all entries of one file. The path of a link removes only the entry of the link, never the entry of its target. When a word is a project name and also a relative path of another entry, `forget` refuses and removes nothing. An agent does not run `forget`: an entry can hold the project identity.
 
+## Collections, expiry dates, and the change log
+
+These are operator decisions. An agent shows the state and gives the commands ([[dev-knw-nsec-rules]] § Rule 13). The model is in [[dev-knw-nsec-model]] § Collections, § Expiry dates, and § The change log and moved refs.
+
+```sh
+secrets collection list                                        # the collections, their names, and the next expiry date
+secrets collection create openai --description "OpenAI API keys" --url https://platform.openai.com/api-keys --warn-days 30
+secrets collection rename openai oai                           # renames each openai/… secret and the record
+secrets mv openai/api-key anthropic/api-key                    # renames one secret in each environment
+secrets set openai/api-key --env prod --expires 2027-01-31     # a new value and its expiry date in one commit
+secrets expiry set openai/api-key --env prod --date 2027-01-31 # the date only (--env is required)
+secrets expiry list --due                                      # the secrets that are due or expired
+secrets log                                                    # the change log, newest first
+```
+
+- **A rename breaks refs.** After `mv` or `collection rename`, the projects that use the old names have moved refs. On each machine, after `secrets store sync`, the operator (or an agent with the approval of the operator) runs `secrets refs --all`, then `secrets refs fix --all`, and commits the changed `secrets.toml` files.
+- **Rotation.** An expiry warning means: replace the key at its provider, then `secrets set <name> --env <env> --expires <new date>`. A new value does not change the date.
+- **The page.** The page of `secrets ui` shows the collections in the side bar, the expiry badges, Activity (the change log), and Health (moved refs, removed refs, due and expired secrets), with "Fix the refs" and the expiry form.
+
 ## The UI: `secrets ui`
 
-`secrets ui` starts a local web page for the operator. The page shows the stores, the projects of this machine, and the names of each project and each environment. A value stays hidden until the operator reveals it. Agents never run `secrets ui` and never read values from it ([[dev-knw-nsec-rules]] § Rule 11). You can tell the operator about it, for example to set the missing values.
+`secrets ui` starts a local web page for the operator. The page shows one store at a time: its projects, its collections, the names of each environment, and the change log. A value stays hidden until the operator reveals it. The page can still change: this section gives only the facts that an agent needs to guide the operator. Agents never run `secrets ui` and never read values from it ([[dev-knw-nsec-rules]] § Rule 11). You can tell the operator about it, for example to set the missing values.
 
 ```sh
 secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
@@ -181,9 +203,11 @@ secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
 
 - **Start.** The operator runs `secrets ui` in a terminal. With no terminal on stdin and stdout, it refuses and starts nothing (`NO_TERMINAL`). The server listens on `127.0.0.1` only, on a random port. The terminal shows one URL: `http://127.0.0.1:<port>/#t=<token>`. Use this `127.0.0.1` URL, not `localhost`: the server accepts no other host name.
 - **The login link.** The token works one time, in the first 60 seconds. The CLI opens the browser with a launch file (mode 600), so the token is in no process argument. With `--no-open`, the operator opens the URL. For a new link, the operator stops `secrets ui` and runs it again. The link is a credential: never send it in a chat or a message.
-- **The projects.** The side bar of the page shows the projects of the project index. When the side bar has no projects ("This machine has no projects yet"), the operator uses "Add projects from a folder" (also in the side bar and in the ⌘K palette): give a folder in the home folder (`~` works), click "Find projects", choose the projects, and click "Add". It does the same as `secrets project add <folder>` (an agent can run that command for the operator). It writes only `projects.toml`.
-- **The identity choice.** After the login, the page asks for an identity of `identities.toml` (`--identity <name>` selects it in advance). The page then reads and writes with the key file of that identity only: no `SOPS_AGE_KEY_FILE`, no `SECRETS_IDENTITY`, and no project identity applies. When `identities.toml` no longer names that key file for the identity, the page locks. With no identity on this machine, the page shows its first setup: it makes the first identity (the default) with a new key or an existing key file.
-- **The lock.** The page locks after 15 minutes with no request (`--idle <minutes>`, 1 to 1440), and when the operator clicks Lock. To unlock, the operator chooses the identity again. The lock and Quit delete the Undo records of the server.
+- **The identity.** The login link unlocks the page at once with the identity of `--identity <name>`, else with the one identity of this machine that has a usable key file. With two or more such identities, the page asks for one. The page then reads and writes with the key file of that identity only: no `SOPS_AGE_KEY_FILE`, no `SECRETS_IDENTITY`, and no project identity applies. With no identity on this machine, the page shows its first setup: it makes the first identity (the default) with a new key or an existing key file.
+- **The store.** After the unlock, the page shows "Choose a store" when the identity opens two or more stores. With one store, it opens that store.
+- **The side bar** of the store: the store switch at the top (the other stores, Sync, and the recipients), Projects (the projects of that store), Collections, and Activity and Health at the bottom. ⌘K and ⌘P open the palette (the projects, the collections, and "Switch the store").
+- **Add projects.** When the store has no projects, the side bar shows "Add projects from a folder" (also in the palette). It does the same as `secrets project add <folder>` (an agent can run that command for the operator). It writes only `projects.toml`.
+- **The lock.** The page locks after 15 minutes with no request (`--idle <minutes>`, 1 to 1440), and when the operator clicks Lock. A reload, Lock, and the idle lock ask for the click "Unlock". The lock and Quit delete the Undo records of the server.
 - **The hidden values.** A list never holds a value. The page shows 8 dots for a hidden value. A reveal gives one value and hides it again after 30 seconds, on blur, and on a change of the selection. Copy works without a reveal, and the page clears the clipboard after 30 seconds when it can. The page compares values ("same as dev") with no reveal. Before each reveal or copy, the server writes one line in `<secrets home>/ui-reveal.log`: the time, the identity, the store, the environment, the name, and show or copy, never the value.
 - **Writes.** Each write of the page uses the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. A write to `prod` or `deploy` needs the typed environment name. An import makes one store commit for each environment. The page changes `secrets.toml`, `secrets.local.toml`, and `.gitignore` with the code of the setup commands; it does not commit the project repository. The terminal shows one line for each write and each sync, with names only.
 - **A part of a write.** A write that changes the store and `secrets.toml` (an import with bind, an added variable, the removal of a variable, an Undo) can stop after one part. Then the page shows `Only a part of the change was saved.` (`PARTIAL_WRITE`) and offers "Undo the saved part" for 60 seconds. The terminal line names the store commits that stay and the file. The store commits stay pushed. To remove a variable, the page changes `secrets.toml` first and unsets the store values after it.

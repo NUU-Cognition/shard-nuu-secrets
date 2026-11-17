@@ -29,6 +29,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    - Request `prod` or `deploy` values only when the task needs them.
    - A platform credential is in the environment `deploy`: `vercel/token`, `vercel/team-id`, `convex/<deployment>/<env>` (a typed deploy key), or `railway/token`. Use the table of [[dev-sk-nsec-plan_push]] (step 7).
    - Request each secret name one time for each environment, also when two variables use it.
+   - A missing ref with a hint `moved to secret://…` or `removed on …` is not a missing value. Do not request a value for it: use [[dev-sk-nsec-diagnose]] (step 7).
 3. **Write the request for a value.** Use this shape. Put one command for each value:
 
    ```text
@@ -43,7 +44,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    Use one of these two ways:
    a) In your own terminal, in the project folder, run each command and type the value at the hidden prompt:
         secrets set <name> --env <env>
-   b) In your own terminal, run `secrets ui`. Choose an identity that opens env <env>. Open the project <project>, select env <env>, and set each value in the page. A change to prod or deploy needs the typed environment name.
+   b) In your own terminal, run `secrets ui`. Use an identity that opens env <env>, and choose the store <store> when the page asks. Open the project <project>, select env <env>, and set each value in the page. A change to prod or deploy needs the typed environment name.
 
    Do not send me the values, and do not send me the login link of secrets ui. Tell me when each value is set (secrets set reports "set" or "unchanged").
    If the command stops or warns, report its exit status. Copy the fixed write-error text, safe rule labels, safe file labels, and cleanup warnings. Do not copy file content or raw tool output. Some error lines show a path that you chose or set. Do not send a line if a path or another field contains a value. Instead, tell me which kind of error occurred.
@@ -54,7 +55,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    - `secrets set` uses the identity that the CLI selects for the operator's shell ([[dev-knw-nsec-model]] § Identities and the key selection). Do not add `--identity` to the command unless the operator names the identity.
    - Outside the project folder, the operator adds `--store <local store name>` or `--mapping <path>` to the command.
    - A successful `secrets set` prints `set  <name>  env <env>  store <store> @ <revision>`, or `unchanged  …` when the store already has that value. Both exit 0. Neither shows a value.
-   - Before the commit, `secrets set` runs the secret scan. It can stop with `✘ The secret scan (gitleaks) …`, or print the warning `secrets: gitleaks is not on PATH, …`. Read the text that the operator sends with [[dev-sk-nsec-diagnose]] (step 9).
+   - Before the commit, `secrets set` runs the secret scan. It can stop with `✘ The secret scan (gitleaks) …`, or print the warning `secrets: gitleaks is not on PATH, …`. Read the text that the operator sends with [[dev-sk-nsec-diagnose]] (step 10).
    - When plain `secrets doctor` shows `SECRETS_GITLEAKS=0: the CLI does not scan store commits` or `gitleaks is not on PATH: the CLI does not scan store commits`, add that line to the request. Ask the operator to check the command environment in their terminal. If the reported condition also applies there, the write has no secret scan ([[dev-knw-nsec-rules]] § Rule 10).
 4. **Write the request for a key.** Use this shape when `secret` stops with `✘ No usable age key: …`, or when `secrets doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`. Do not use it for `this machine as a recipient: unknown (…)`: that line is not proof of a missing key (see [[dev-sk-nsec-diagnose]]). First collect the public facts yourself:
    - When doctor reports a missing key file and no other key source, use step 1a of the request.

@@ -1,5 +1,5 @@
 ---
-description: "Run a program with the values of the store in its process environment (secret <cmd>), read the secret: line and the exit status, and act on a failure"
+description: "Run a program with the values of the store in its process environment (secret <cmd>), read the secret: line, the expiry warnings, and the exit status, and act on a failure (also a moved or removed ref)"
 ---
 
 > [!important] THIS FILE IS AN INSTRUCTION. WHEN REFERENCED IT IS MEANT TO BE TAKEN AS AN ACTION.
@@ -45,6 +45,8 @@ Run a program (a dev server, a test, a script) with the variables of its project
    - Check the project, the environment, and the count.
    - `· <n> optional not set` means that the store has no value for `<n>` `optional` entries. The CLI does not give these variables. When your shell has a variable of the same name, the CLI removes it from the process environment of the program, and stderr says `secret: the store has no value for the optional <VAR>: the shell value is removed (--keep-env keeps it)`. With `--keep-env`, the shell value stays, and stderr says so.
    - `store not read (no ref entries)` means that the mapping has only literals for this target.
+   - `secrets: warning: <VAR> (secret://<name>, <env>) expires on <date> (in <n> days). …` or `… expired on <date> (<n> days ago). …` is an expiry warning. The program still runs. Tell the operator the variable, the secret name, the environment, and the date. Do not run the `secrets expiry set` command of the line: it is for the operator ([[dev-knw-nsec-rules]] § Rule 13). When the program then fails with an authentication error, report the warning with the failure.
+   - `secrets: warning: <VAR> → secret://<name> (optional, not set): moved to …` (or `removed on …`): the program runs without that variable. Follow [[dev-sk-nsec-diagnose]] (step 7) after the run.
    - `secrets: cloning the store of <project> from <url>` before the line means a first clone (a network access). Check that the secrets home is the intended one ([[dev-knw-nsec-model]] § The store). Only the operator can remove a clone (`secrets store remove`).
 9. **Check a variable without its value** when the task needs proof:
    ```sh
@@ -55,7 +57,8 @@ Run a program (a dev server, a test, a script) with the variables of its project
     | Status | Meaning | Action |
     |---|---|---|
     | `0` | The program succeeded. | Continue. |
-    | `1` with `✘ <n> variable(s) have no value in env <env>` | Values are missing. Nothing ran. | Use [[dev-sk-nsec-request_value]] for each listed name. |
+    | `1` with `✘ <n> variable(s) have no value in env <env>` | Values are missing. Nothing ran. | Use [[dev-sk-nsec-request_value]] for each listed name with no hint. |
+    | `1` with `✘ <n> variable(s) have no value …` and a line ``- <VAR> → secret://<name>: moved to secret://<new name> …; run `secrets refs fix` `` or `… removed on …` | The change log moved or removed the name. Nothing ran. The CLI never uses the new name. | Do not request a value for that name. Use [[dev-sk-nsec-diagnose]] (step 7): `secrets refs fix --dry-run`, then ask the operator. |
     | `1` with `✘ There is no secrets.toml …` | No mapping here. | Go to the project folder, or use [[dev-sk-nsec-setup_project]]. |
     | `1` with `✘ <path> is not valid:` | A mapping problem. A `[targets.*]` table that is not valid also stops `secret <cmd>`. | Run `secrets doctor` and use [[dev-sk-nsec-diagnose]]. |
     | `1` with `✘ No usable age key: …` | The key file is missing, not a regular file, or cannot be read. Nothing ran. | Tell the operator the path. Do not make a key. Use [[dev-sk-nsec-request_value]] (the key request). |

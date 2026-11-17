@@ -1,5 +1,5 @@
 ---
-description: "The store model and the project mapping: store files and groups, identities and the key selection order, the project index, secret names, secret:// references, secrets.toml and secrets.local.toml entries, targets, literals, the environment chain, and what goes in the store"
+description: "The store model and the project mapping: store files and groups, identities and the key selection order, the project index, secret names, collections, expiry dates, the change log and moved refs, secret:// references, secrets.toml and secrets.local.toml entries, targets, literals, the environment chain, and what goes in the store"
 ---
 
 # Knowledge: Store Model and Project Mapping
@@ -20,13 +20,16 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 | `preview.enc.yaml` | The preview values that are different from dev. | `dev` |
 | `prod.enc.yaml` | The production values. | `prod` |
 | `deploy.enc.yaml` | The platform credentials of `secrets plan` and `secrets push`: `vercel/token`, `vercel/team-id`, `convex/<deployment>/<env>`, `railway/token`. | `deploy` |
+| `collections.toml` | The collection records: a description, a source URL, and a warning window for each collection. Plaintext, no values. | — |
+| `metadata.toml` | The expiry dates of the secrets, for each environment. Plaintext, no values. | — |
+| `changes.jsonl` | The change log: one JSON line for each change of a store write. Names only, never a value. | — |
 
 - SOPS encrypts each value with the data key of its file. The data key is encrypted for each recipient of the group of the file.
 - A recipient is the age key of one machine, with an id `<Name>@<machine>` and a list of groups. A machine opens only the files of its groups.
 - The recovery key is an age key on paper. It is a recipient of all groups.
 - The CLI keeps the store clones in the secrets home: `$SECRETS_HOME`, else `<NUU home>/secrets/` for the prod build and `<NUU home>/secrets-dev/` for the dev build. The NUU home is `$NUU_HOME`, else `~/.nuucognition`. The list of clones is `<secrets home>/stores.toml`. The secrets home also holds `identities.toml` (the identities), `projects.toml` (the project index), `keys/` (the new keys of `secrets identity add`), and `ui-reveal.log` (the reveal log of `secrets ui`).
 - The secrets home and its ancestors can be symbolic links. Commands that check a managed clone refuse linked `stores/`, clone, or `.git` folders below the real secrets home. Not every metadata command runs that check. A successful `whoami` is not proof that these folders passed it. Use plain `secrets doctor` to check the clone.
-- Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, and each `*.enc.yaml`. The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once. A file or a folder that the CLI cannot check (an `lstat` error other than a missing path) is never treated as missing: the command stops.
+- Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, `collections.toml`, `metadata.toml`, `changes.jsonl`, and each `*.enc.yaml`. Git must commit `collections.toml`, `metadata.toml`, and `changes.jsonl`: an ignore rule of Git that matches one of them stops each write (`UNSAFE_STORE`). The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once. A file or a folder that the CLI cannot check (an `lstat` error other than a missing path) is never treated as missing: the command stops.
 - The SOPS metadata of each store file (`version`, `lastmodified`, `mac`, the `age` entries, and `encrypted_regex`) must have the form that SOPS writes. A store write stops on a field in another form (`UNSAFE_STORE` before the write, `UNSAFE_RESULT` after a SOPS write). The message names the field, never its value.
 - The store clone is a cache that the CLI owns. A refresh (`secret`, `export`, `plan` without `--offline`, `push`, `store sync`, `doctor --online`) fetches it and resets it to the remote.
 - A write that changes the store makes one Git commit and one push. A write with no change makes no commit. The operator does the writes, also `store fix-config` and `store remove` (see [[dev-knw-nsec-rules]] § Rule 5).
@@ -75,6 +78,45 @@ A secret name is a lowercase path, for example `clerk/secret-key`. The path is t
 - A segment cannot end with `_unencrypted`. The first segment cannot be `sops`. SOPS gives these keys a special meaning.
 - The environment is not part of the name. The environment selects the store file. Thus `clerk/secret-key` in `dev.enc.yaml` and `clerk/secret-key` in `prod.enc.yaml` are two values with one name.
 - In `secrets.toml`, a reference to a name is `secret://<name>`, for example `secret://clerk/secret-key`.
+- The first segment of a name is its collection ([Collections](#collections)). A new first segment (with `secrets mv`) moves the secret to another collection.
+
+## Collections
+
+A collection is the first segment of a secret name: `openai` in `openai/api-key`, `clerk` in `clerk/secret-key`. The team uses one collection for each source of keys (a provider or a service). A name with one segment is in no collection. All collections are in the one store of the team: one Git repository, one recipient list, one sync.
+
+- A collection exists when a store file has a name in it, or when it has a record in `collections.toml`. A record has three optional fields: `description` (one line, at most 200 characters), `url` (an `https://` URL with no user name and no password, for example the page of the provider where the keys are made), and `warn-days` (the default warning window of the expiry dates of its secrets, 1 to 365 days).
+- `secrets collection list` shows each collection: the number of names in each environment, the window, the description, the URL, and the next expiry date. `(no record)` marks a collection with names and no record. It reads plaintext names and needs no key.
+- The operator changes the collections: `collection create|edit|rm`, and `collection rename`, which renames each secret of the collection as `secrets mv` does ([[dev-knw-nsec-rules]] § Rule 13).
+- When you select a secret name for a new variable, use an existing collection for the same provider ([[dev-sk-nsec-setup_project]], step 6).
+
+## Expiry dates
+
+A secret can have one expiry date in each environment: the first day on which its key does not work. The prod key and the dev key are often different keys. The dates are in `metadata.toml` (plaintext, no values).
+
+- **The state** on a day: `expired` from the date on; `due` when the date is inside the warning window; else `ok`. The window is the `warn-days` of the entry, else the `warn-days` of the collection record, else 14 days. The day is the local date of this machine.
+- **Warnings, never errors.** The date is the estimate of a person. `secret <cmd>`, `run`, and `export` write one stderr line for each mapped secret of the environment that is `due` or `expired`. For `preview`, the date of the file that gave the value (the preview overlay, else dev). `doctor` shows each one as a `warn` line. `secrets store sync` lists the `due` and `expired` secrets of the store.
+- **The other writes keep the dates right.** `unset`, `edit`, and the page remove the date of a removed name. `mv` and `collection rename` move the dates with the names. A new value does not change the date: the operator sets the date of the new key (`secrets set <name> --env <env> --expires <date>`, or `secrets expiry set`).
+- The operator sets and clears the dates. You report a warning ([[dev-knw-nsec-rules]] § Rule 13).
+
+## The change log and moved refs
+
+Each store write adds its changes to `changes.jsonl` in the same commit: `add`, `change`, `remove`, and `move` (a secret name, with its environments), `collection-add|change|rename|remove`, and `expiry-set|clear`. Each line has the time (UTC) and `by`: the recipient id of the key of the write, or `null`. A line never holds a value. `secrets log` shows the log, newest first. `secrets store sync` shows the lines since the last sync of this machine.
+
+- Recipient changes (`recipient add|rm`) and `store fix-config` add no line: `secrets store sync` shows the recipient changes from `recipients.toml`.
+- A store of an earlier version has no `changes.jsonl`. A write of an earlier version of the CLI adds no line.
+
+**The trace of a ref.** When a `ref` of `secrets.toml` or `secrets.local.toml` has no value, the CLI follows its name through the change log: each later `move` to the new name, until a name that a store file holds, a `remove`, or the end of the log. A name that a later write added again is a new secret: then the log says nothing about it.
+
+| State (`secrets refs`) | Meaning |
+|---|---|
+| `ok` | A store file holds the name. |
+| moved | The log moved the name: `moved to secret://<new name> on <date> by <recipient id>`. The CLI never uses the value of the new name. The project file must change first (`secrets refs fix`, with the approval of the operator). |
+| removed | The log removed the name: `removed on <date> by <recipient id>`. The operator decides what the entry gets. |
+| not in the store | No store file holds the name, and the log has no line for it: a missing value. |
+
+- The error of a missing value (`secret <cmd>`, `run`, `export`) and the `doctor` line add the hint. An `optional` entry with a moved or removed name gives the same hint as a warning.
+- `plan` and `push` stop on a moved ref, also on an `optional` ref: a push never removes the variable of the platform because a secret has a new name.
+- `secrets refs fix` changes only the text of the ref of each entry, and keeps every other byte of the file. It refuses a project file with a symbolic link in its path.
 
 ## The environment chain
 
@@ -147,7 +189,7 @@ environments = { prod = "production" }   # store environment → Railway environ
 - `[targets.convex]` has `deployment`: one name segment (lowercase letters, digits, `_`, and `-`).
 - `[targets.railway]` has `project`, `service`, and `environments` (at least one entry; the keys are `dev`, `preview`, and `prod`). An environment with no entry cannot go to Railway.
 - A missing field, an unknown field, or a bad name is an error of the mapping. A table that is not valid stops **every** command of that project, also `secret <cmd>`, `run`, and `export`. Run `secrets doctor`: it names each problem and never shows a value.
-- The Convex tool owns some names, and the CLI never writes them to a Convex deployment: `CONVEX_DEPLOYMENT`, `CONVEX_DEPLOY_KEY`, `CONVEX_DEPLOYMENT_TOKEN`, `CONVEX_SELF_HOSTED_URL`, `CONVEX_SELF_HOSTED_ADMIN_KEY`, `CONVEX_CLOUD_URL`, `CONVEX_URL`, `CONVEX_SITE_URL`, and the client URL names (`NEXT_PUBLIC_CONVEX_URL`, `VITE_CONVEX_URL`, `PUBLIC_CONVEX_URL`, `REACT_APP_CONVEX_URL`, `EXPO_PUBLIC_CONVEX_URL`, and the same `…_CONVEX_SITE_URL` names). An entry with one of these names cannot have the target `convex`. Another target (for example `NEXT_PUBLIC_CONVEX_URL` to `vercel`) is valid.
+- The Convex tool owns some names, and the CLI never writes them to a Convex deployment: `CONVEX_DEPLOYMENT`, `CONVEX_DEPLOY_KEY`, `CONVEX_DEPLOYMENT_TOKEN`, `CONVEX_SELF_HOSTED_URL`, `CONVEX_SELF_HOSTED_ADMIN_KEY`, `CONVEX_CLOUD_URL`, `CONVEX_URL`, `CONVEX_SITE_URL`, and the client URL names (`NEXT_PUBLIC_CONVEX_URL`, `VITE_CONVEX_URL`, `PUBLIC_CONVEX_URL`, `REACT_APP_CONVEX_URL`, `EXPO_PUBLIC_CONVEX_URL`, and the same `…_CONVEX_SITE_URL` names). An entry with one of these names cannot have the target `convex`. The CLI accepts another target (for example `NEXT_PUBLIC_CONVEX_URL` to `vercel`), but that is a decision of the operator: for local development, `npx convex dev` writes `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` to `.env.local` itself.
 - A platform target and its table are operator decisions ([[dev-knw-nsec-rules]] § Rule 8). The delivery is in [[dev-sk-nsec-plan_push]].
 
 ## The local mapping: `secrets.local.toml`
@@ -182,7 +224,7 @@ A literal of `secrets.toml` is public. `secrets push` does not check literals ag
 | A value that is not secret, but is different in each environment | The store. A `ref` entry. |
 | A value that is not secret and is the same in all environments | A literal in `secrets.toml`. |
 | A different entry for this machine only | An entry in `secrets.local.toml`: a `ref` to another secret name, or a literal that is not secret. Never a value. |
-| A variable that another tool writes and manages, for example `CONVEX_DEPLOYMENT` (written by `npx convex dev` into `.env.local`) | Not in the store and not in the mapping. The tool owns it. |
+| A variable that another tool writes and manages, for example `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` (written by `npx convex dev` into `.env.local`) | Not in the store and not in the mapping. The tool owns it, and a push never sends it to Convex. Do not open or change that `.env.local`. |
 
 - A `NEXT_PUBLIC_*` variable is for the browser build: it is public in the bundle. `secrets doctor` warns when a `NEXT_PUBLIC_*` entry targets `convex`.
 - A variable of a `.env*` file that the mapping also manages is a duplicate. `secrets doctor` warns and names it. The operator removes it from the `.env*` file: `secret <cmd>` gives the variable.
@@ -192,5 +234,5 @@ A literal of `secrets.toml` is public. `secrets push` does not check literals ag
 - The process gets the shell environment and the variables of the `local` target.
 - A store value replaces a shell variable of the same name. stderr names each replaced variable (never the value). `--keep-env` keeps the shell value.
 - An `optional` variable with no store value: `run` removes a shell variable of the same name. `--keep-env` keeps it.
-- The values stay in memory and in the process environment of the command. `secret` writes no file with a plaintext value. A refresh or a first clone changes the Git files and the index of the store clone in the secrets home (ciphertext and public data only).
+- The values stay in memory and in the process environment of the command. `secret` writes no file with a plaintext value, also no `.env` file. A file with values comes only from a redirect of `secrets export` (for example `secrets export --format dotenv > .env.local`). Agents never make such a file ([[dev-knw-nsec-rules]] § Rule 2). A refresh or a first clone changes the Git files and the index of the store clone in the secrets home (ciphertext and public data only).
 - Other processes of the same user, and root, can read the process environment of the command (`/proc/<pid>/environ`).
