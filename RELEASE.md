@@ -2,6 +2,20 @@
 
 The notes of each version of the shard `nsec` (`@nuucognition/nuu-secrets`). The notes of the versions before 0.6.0 are in the Git history of this repository.
 
+## 0.8.0
+
+For the CLI npm `@nuucognition/secrets-cli@0.3.0-beta.0`: the code of the machine branch `even-macbook` of `NUU-Cognition/secrets` at `99cb649`, which goes to canon for this version. It adds the vault (Notepad 006, Tasks 010 to 013) to the CLI of `0.2.0-beta.1`. Install it with the exact version: `npm install -g @nuucognition/secrets-cli@0.3.0-beta.0`. `0.2.0-beta.1` and older have no vault.
+
+- **Rule 14: the vault is for the operator.** Agents never read or write a vault text: never `secrets vault show` (also `--copy`), `vault edit`, or `vault set`, also when the operator asks, and never a read of the clipboard. When a task needs a password, a login, or another text from the vault, the agent asks the operator to do that step. `secrets vault list` is an agent command (names only). `vault mv|rm` need the approval of the operator. The vault is not part of the environments: an agent never tells the operator to put a value of an environment into the vault, or a vault text into `secrets.toml`. In a headless session, a task that needs a vault text is a blocker. The rule is in the rules, the init (item 14), and the headless init (item 11). Rule 13 stays the rule for moved refs, collections, and expiry dates.
+- **Rules 4, 5, 6, 7, 10, and 11:** no access to a vault file; `vault mv|rm` on the operator list, and `vault show|edit|set` never for an agent; `vault list` on the agent list; a vault text is not a value of an environment; `UNSAFE_VAULT`; the page shows the vault, and a reveal of a vault entry writes `ui-reveal.log` too.
+- **Request a value:** the new step 5 (a step that needs a vault text: the entry name from `vault list`, the step for the operator, never the text). The steps 5 to 8 of 0.7.1 are now 6 to 9.
+- **Diagnose:** the `vault:` lines of `doctor`, the vault line of `store sync`, and `UNSAFE_VAULT`.
+- **Set up a project:** a password or a login that no program reads gets no entry: it belongs in the vault.
+- **The model:** the vault files, the vault ops of the change log, the metadata check of a vault file (`UNSAFE_VAULT`), and the section The vault.
+- **The CLI reference:** the install of `0.3.0-beta.0`; `secrets vault list`; the operator rows of `vault show|edit|set|mv|rm` (the terminal rules, the `\xNN` and `\u{XXXX}` screen form, the clear of the clipboard after 30 s with `cleared in 30 s` or `not cleared`, the exact bytes of `vault set`, `Your new text was not saved.`); the vault error codes and the two `NO_ACCESS` messages; `UNSAFE_VAULT` (paths, and the metadata refusal of a vault file); the vault lines of `doctor`, `store sync`, and `log --name`; and the known limits 31 and 32.
+- **The setup guide:** the section The vault (the operator commands, the groups, the exact bytes, the screen, the clipboard, edit, and the `--rotate` line), and the Vault view of the page (Show, Copy, Edit, the typed name for Remove, and the lock).
+- **The description** names the vault (passwords and logins) again.
+
 ## 0.7.1
 
 For the CLI patch npm `@nuucognition/secrets-cli@0.2.0-beta.1`, built from the draft commit `31ca2d7` of `NUU-Cognition/secrets` (not on canon, which is `633496d`): the code of `0.2.0-beta.0` with the check of the SOPS metadata before each decrypt (`273da87`). Install it with the exact version: `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1`. The npm tag `beta` gives `0.2.0-beta.1` after its publish; `latest` stays on `0.1.0-beta.1` until the operator moves it.

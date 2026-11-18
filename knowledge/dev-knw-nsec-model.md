@@ -1,5 +1,5 @@
 ---
-description: "The store model and the project mapping: store files and groups, identities and the key selection order, the project index, secret names, collections, expiry dates, the change log and moved refs, secret:// references, secrets.toml and secrets.local.toml entries, targets, literals, the environment chain, and what goes in the store"
+description: "The store model and the project mapping: store files and groups, identities and the key selection order, the project index, secret names, collections, expiry dates, the change log and moved refs, the vault, secret:// references, secrets.toml and secrets.local.toml entries, targets, literals, the environment chain, and what goes in the store"
 ---
 
 # Knowledge: Store Model and Project Mapping
@@ -22,15 +22,16 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 | `deploy.enc.yaml` | The platform credentials of `secrets plan` and `secrets push`: `vercel/token`, `vercel/team-id`, `convex/<deployment>/<env>`, `railway/token`. | `deploy` |
 | `collections.toml` | The collection records: a description, a source URL, and a warning window for each collection. Plaintext, no values. | — |
 | `metadata.toml` | The expiry dates of the secrets, for each environment. Plaintext, no values. | — |
-| `changes.jsonl` | The change log: one JSON line for each change of a store write. Names only, never a value. | — |
+| `changes.jsonl` | The change log: one JSON line for each change of a store write. Names only, never a value or a vault text. | — |
+| `vault/<group>/<name>.enc.yaml` | One vault entry: a free text, encrypted. The name is the path of the file. | `dev` or `prod` |
 
 - SOPS encrypts each value with the data key of its file. The data key is encrypted for each recipient of the group of the file.
 - A recipient is the age key of one machine, with an id `<Name>@<machine>` and a list of groups. A machine opens only the files of its groups.
 - The recovery key is an age key on paper. It is a recipient of all groups.
 - The CLI keeps the store clones in the secrets home: `$SECRETS_HOME`, else `<NUU home>/secrets/` for the prod build and `<NUU home>/secrets-dev/` for the dev build. The NUU home is `$NUU_HOME`, else `~/.nuucognition`. The list of clones is `<secrets home>/stores.toml`. The secrets home also holds `identities.toml` (the identities), `projects.toml` (the project index), `keys/` (the new keys of `secrets identity add`), and `ui-reveal.log` (the reveal log of `secrets ui`).
 - The secrets home and its ancestors can be symbolic links. Commands that check a managed clone refuse linked `stores/`, clone, or `.git` folders below the real secrets home. Not every metadata command runs that check. A successful `whoami` is not proof that these folders passed it. Use plain `secrets doctor` to check the clone.
-- Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, `collections.toml`, `metadata.toml`, `changes.jsonl`, and each `*.enc.yaml`. Git must commit `collections.toml`, `metadata.toml`, and `changes.jsonl`: an ignore rule of Git that matches one of them stops each write (`UNSAFE_STORE`). The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once. A file or a folder that the CLI cannot check (an `lstat` error other than a missing path) is never treated as missing: the command stops.
-- Before each decrypt, the CLI reads the store file itself and checks its SOPS metadata. A key of another system (`kms`, `gcp_kms`, `hckms`, `azure_kv`, `hc_vault`, `pgp`, or `key_groups` that is not empty), an unknown metadata key, a YAML problem, or no SOPS metadata stops the read before SOPS runs (`UNSAFE_STORE`). Only age keys open a store file ([[dev-knw-nsec-cli]] § The check of the SOPS metadata before each decrypt).
+- Each file of a store that the CLI reads or writes must be a regular file: `recipients.toml`, `.sops.yaml`, `.gitleaks.toml`, `README.md`, `.gitignore`, `collections.toml`, `metadata.toml`, `changes.jsonl`, each `*.enc.yaml`, and each vault file. Git must commit `collections.toml`, `metadata.toml`, `changes.jsonl`, and each vault file: an ignore rule of Git that matches one of them stops each write (`UNSAFE_STORE`). The CLI checks the commit (mode `120000` is a link) and the work tree. It never reads or writes through a link, and it refuses a FIFO or another special file at once. A file or a folder that the CLI cannot check (an `lstat` error other than a missing path) is never treated as missing: the command stops.
+- Before each decrypt, the CLI reads the store file itself and checks its SOPS metadata. The same check runs before each decrypt of a vault file. A key of another system (`kms`, `gcp_kms`, `hckms`, `azure_kv`, `hc_vault`, `pgp`, or `key_groups` that is not empty), an unknown metadata key, a YAML problem, or no SOPS metadata stops the read before SOPS runs (`UNSAFE_STORE` for a store file, `UNSAFE_VAULT` for a vault file). Only age keys open a store file ([[dev-knw-nsec-cli]] § The check of the SOPS metadata before each decrypt).
 - The SOPS metadata of each store file (`version`, `lastmodified`, `mac`, the `age` entries, and `encrypted_regex`) must have the form that SOPS writes. A store write stops on a field in another form (`UNSAFE_STORE` before the write, `UNSAFE_RESULT` after a SOPS write). The message names the field, never its value.
 - The store clone is a cache that the CLI owns. A refresh (`secret`, `export`, `plan` without `--offline`, `push`, `store sync`, `doctor --online`) fetches it and resets it to the remote.
 - A write that changes the store makes one Git commit and one push. A write with no change makes no commit. The operator does the writes, also `store fix-config` and `store remove` (see [[dev-knw-nsec-rules]] § Rule 5).
@@ -101,7 +102,7 @@ A secret can have one expiry date in each environment: the first day on which it
 
 ## The change log and moved refs
 
-Each store write adds its changes to `changes.jsonl` in the same commit: `add`, `change`, `remove`, and `move` (a secret name, with its environments), `collection-add|change|rename|remove`, and `expiry-set|clear`. Each line has the time (UTC) and `by`: the recipient id of the key of the write, or `null`. A line never holds a value. `secrets log` shows the log, newest first. `secrets store sync` shows the lines since the last sync of this machine.
+Each store write adds its changes to `changes.jsonl` in the same commit: `add`, `change`, `remove`, and `move` (a secret name, with its environments), `collection-add|change|rename|remove`, `expiry-set|clear`, and `vault-add|change|remove|move` (a vault entry name and its group). Each line has the time (UTC) and `by`: the recipient id of the key of the write, or `null`. A line never holds a value or a vault text. `secrets log` shows the log, newest first. `secrets store sync` shows the lines since the last sync of this machine.
 
 - Recipient changes (`recipient add|rm`) and `store fix-config` add no line: `secrets store sync` shows the recipient changes from `recipients.toml`.
 - A store of an earlier version has no `changes.jsonl`. A write of an earlier version of the CLI adds no line.
@@ -118,6 +119,18 @@ Each store write adds its changes to `changes.jsonl` in the same commit: `add`, 
 - The error of a missing value (`secret <cmd>`, `run`, `export`) and the `doctor` line add the hint. An `optional` entry with a moved or removed name gives the same hint as a warning.
 - `plan` and `push` stop on a moved ref, also on an `optional` ref: a push never removes the variable of the platform because a secret has a new name.
 - `secrets refs fix` changes only the text of the ref of each entry, and keeps every other byte of the file. It refuses a project file with a symbolic link in its path.
+
+## The vault
+
+The vault keeps free text that is not an environment variable: passwords, logins, recovery codes, and private keys. Agents never read or write a vault text ([[dev-knw-nsec-rules]] § Rule 14).
+
+- **Not part of the environments.** No `secrets.toml` maps a vault entry. `secret <cmd>`, `run`, `export`, `plan`, and `push` never read the vault, and `edit`, `mv`, `unset`, and the collection commands never change it.
+- **Files.** One entry is one file at `vault/<group>/<name>.enc.yaml`, with one key, `text`. The entry name follows the rule of a secret name. It is plaintext (the path of the file), and it is in one group only. The text is always encrypted, for exactly the recipients of the group in `recipients.toml`. No other file can be under `vault/`.
+- **Groups.** `dev` or `prod` (the default is `prod`). The machines of that group open the entry. `deploy` is not a vault group: CI machines do not read the vault.
+- **The text.** Free UTF-8 text, not empty, at most 64 KiB, with no NUL character. It comes back byte for byte.
+- **Writes.** The operator writes the vault: `vault edit`, `vault set`, `vault mv`, `vault rm`, or the Vault view of `secrets ui`. Each write is one store commit through the write path of the CLI. A machine changes only the entries of its own groups. When another machine changed the same entry, the write stops with a conflict (exit 3).
+- **Recipients.** `recipient add` and `recipient rm` encrypt the vault entries of the changed groups again. `recipient rm --rotate` lists the vault entries that the removed key could open: the operator changes each password or key at its service, then saves the new text.
+- **The checks.** Each store write checks the vault paths and the policy of each vault file first, with no decrypt. A broken vault file stops each write of its store, also `secrets set` (`UNSAFE_VAULT` or `UNSAFE_STORE`). `doctor` shows each problem in lines that start with `vault:`.
 
 ## The environment chain
 
@@ -225,6 +238,7 @@ A literal of `secrets.toml` is public. `secrets push` does not check literals ag
 | A value that is not secret, but is different in each environment | The store. A `ref` entry. |
 | A value that is not secret and is the same in all environments | A literal in `secrets.toml`. |
 | A different entry for this machine only | An entry in `secrets.local.toml`: a `ref` to another secret name, or a literal that is not secret. Never a value. |
+| A password, a login, recovery codes, or a private key that no program reads from its environment | The vault. The operator writes it. Never a `secrets.toml` entry, also not a literal. |
 | A variable that another tool writes and manages, for example `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL` (written by `npx convex dev` into `.env.local`) | Not in the store and not in the mapping. The tool owns it, and a push never sends it to Convex. Do not open or change that `.env.local`. |
 
 - A `NEXT_PUBLIC_*` variable is for the browser build: it is public in the bundle. `secrets doctor` warns when a `NEXT_PUBLIC_*` entry targets `convex`.

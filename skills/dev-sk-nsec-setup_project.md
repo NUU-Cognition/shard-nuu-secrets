@@ -44,6 +44,7 @@ When this machine has no key or no store yet, the setup of the machine comes fir
    - A secret, or a value that is different in each environment: a `ref` entry.
    - A value that is not secret and is the same in all environments: a literal.
    - A variable that another tool writes (for example `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL`, which `npx convex dev` writes to `.env.local`): no entry.
+   - A password, a login, or recovery codes that no program reads from its environment: no entry. It belongs in the vault, and only the operator writes it ([[dev-knw-nsec-rules]] § Rule 14).
    - When you cannot tell if a value is secret, use a `ref` entry.
 6. **Select the secret names.** A secret name is a lowercase path, usually `<provider>/<what>`, for example `clerk/secret-key` or `sentry/dsn`.
    - The team has one store. Use the same name for the same value in all projects. Read the `secrets.toml` of other projects of the team for names that exist.

@@ -1,5 +1,5 @@
 ---
-description: "The setup of NUU Secrets for an operator: the install, Git access, the guided setup secrets setup and setup --print, a new store for a new team, a new machine for a store, a project, identities (the least access as the default), the project index, collections, expiry dates, the change log and the ref fix, the local web page secrets ui (operator only), the accepted store URL forms, and which steps an agent can do"
+description: "The setup of NUU Secrets for an operator: the install, Git access, the guided setup secrets setup and setup --print, a new store for a new team, a new machine for a store, a project, identities (the least access as the default), the project index, collections, expiry dates, the change log and the ref fix, the vault (operator only), the local web page secrets ui (operator only), the accepted store URL forms, and which steps an agent can do"
 ---
 
 # Knowledge: The Setup for an Operator
@@ -10,7 +10,7 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 
 | Step | Who | Commands |
 |---|---|---|
-| Install the CLI and the tools | Operator | `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1`; SOPS, age, Git, gitleaks |
+| Install the CLI and the tools | Operator | `npm install -g @nuucognition/secrets-cli@0.3.0-beta.0`; SOPS, age, Git, gitleaks |
 | The guided setup | Operator | `secrets setup` (on a terminal) |
 | Show the state of the setup | Agent or operator | `secrets setup --print` (changes nothing) |
 | The key of this machine | Operator | `secrets keygen` |
@@ -25,15 +25,17 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 | Show the identities and the project index | Agent or operator | `secrets identity list`, `secrets project list`, `secrets project identity` |
 | Add the projects of a folder to the project index | Agent or operator | `secrets project add <folder>` (first with `--dry-run`), or "Add projects from a folder" in the page of `secrets ui` (operator) |
 | Remove a project from the project index | Operator | `secrets project forget <name\|path>` |
-| Show the change log, the refs, the collections, and the expiry dates | Agent or operator | `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets collection list`, `secrets expiry list` |
+| Show the change log, the refs, the collections, the expiry dates, and the vault entry names | Agent or operator | `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets collection list`, `secrets expiry list`, `secrets vault list` |
 | Rename a secret, change the collections, set the expiry dates | Operator (an agent only with the approval of the operator) | `secrets mv`, `secrets collection create\|edit\|rename\|rm`, `secrets expiry set\|clear`, `secrets set … --expires <date>` |
 | Fix the moved refs of the projects | Operator (an agent only with the approval of the operator) | `secrets refs fix` |
+| Read and write the vault | Operator only (never an agent) | `secrets vault show\|edit\|set`, or the Vault view of `secrets ui` |
+| Rename, move, or remove a vault entry | Operator (an agent only with the approval of the operator) | `secrets vault mv\|rm` |
 | The local web page | Operator only (never an agent) | `secrets ui` |
 | Check | Agent or operator | `secrets doctor` |
 
 ## Before the setup
 
-- **The CLI.** `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1` gives the commands `secrets` and `secret`. It needs Node.js 24 or later. See [[dev-knw-nsec-cli]] § Install.
+- **The CLI.** `npm install -g @nuucognition/secrets-cli@0.3.0-beta.0` gives the commands `secrets` and `secret`. It needs Node.js 24 or later. See [[dev-knw-nsec-cli]] § Install.
 - **The tools.** SOPS 3.11 or later, `age` and `age-keygen`, and Git are necessary. gitleaks is optional, but without it the CLI does not scan store commits (Rule 10). `secrets doctor` and step 1 of `secrets setup` check each tool and give its install command.
 - **Git access.** The CLI uses Git for the store repository. The machine needs Git access to that repository: an SSH key that the Git host accepts, or a Git credential helper for HTTPS. Never put a credential in a store URL. The CLI refuses an HTTPS URL with user information and an SSH URL with a password.
 - **The repository of a new store.** The CLI does not make the repository. The operator makes an empty private repository on the Git host first (no README, no first commit).
@@ -193,6 +195,29 @@ secrets log                                                    # the change log,
 - **Rotation.** An expiry warning means: replace the key at its provider, then `secrets set <name> --env <env> --expires <new date>`. A new value does not change the date.
 - **The page.** The page of `secrets ui` shows the collections in the side bar, the expiry badges, Activity (the change log), and Health (moved refs, removed refs, due and expired secrets), with "Fix the refs" and the expiry form.
 
+## The vault
+
+The vault keeps free text that is not an environment variable: passwords, logins, recovery codes, private keys ([[dev-knw-nsec-model]] § The vault). Only the operator reads and writes a vault text. An agent never runs `vault show`, `vault edit`, or `vault set`, also when the operator asks ([[dev-knw-nsec-rules]] § Rule 14).
+
+```sh
+secrets vault list                                   # names, groups, the last change, the access (an agent can run it)
+secrets vault edit aws/root-login                    # a new entry in group prod (the default), in your editor
+secrets vault edit test-accounts/stripe --group dev  # a new entry in group dev
+secrets vault set aws/root-login < file              # the text from a file or a pipe, byte for byte
+secrets vault show aws/root-login                    # the text, only on a terminal
+secrets vault show aws/root-login --copy             # the text to the clipboard; no text on the screen
+secrets vault mv aws/root-login aws/root             # rename (add --group dev to move it to the other group)
+secrets vault rm aws/root-login                      # Git history keeps the old versions
+```
+
+- **Groups.** `dev` or `prod` (default `prod`). Only the machines of the group open the entry. A machine writes only the entries of its own groups.
+- **Not an environment.** `secret <cmd>` never gives a vault entry to a program. A value that a program reads from its environment goes into the store with `secrets set` and a `ref` entry, not into the vault.
+- **The exact bytes.** `vault set` keeps each byte of stdin, also a last line end (`echo pw | secrets vault set x` stores a line end; use `printf '%s' …`, or a file). The text is 1 byte to 64 KiB of UTF-8 with no NUL character (`BAD_VAULT_TEXT`). `vault set` refuses a terminal on stdin: type a text in `vault edit`. A file with the text is plaintext: delete it after the write (a deleted file can stay on an SSD).
+- **The screen.** `vault show` prints only to a terminal. It shows each control character as `\xNN` and each invisible format character as `\u{XXXX}`, with a line on stderr that counts them: `--copy` gives the exact bytes.
+- **The clipboard.** `vault show --copy` uses `pbcopy` (macOS), or `wl-copy`, `xclip`, or `xsel` (Linux, only with `WAYLAND_DISPLAY` or `DISPLAY` set). After 30 s, a background process clears the clipboard when it still holds the same text (it keeps only a hash). The copy line ends with `cleared in 30 s`, or with `not cleared` when there is no read tool (`pbpaste`, `wl-paste`, `xclip`, `xsel`).
+- **Edit.** `vault edit` saves only when the entry is still the version that the editor showed; else a conflict (exit 3). After each failure, the line `Your new text was not saved.`: copy the text again from its source.
+- **Recipients.** After `secrets recipient rm --rotate`, change each listed vault entry at its service (`rotate  vault/<group>  <name>  (secrets vault edit <name>)`), then save the new text with `secrets vault edit <name>`.
+
 ## The UI: `secrets ui`
 
 `secrets ui` starts a local web page for the operator. The page shows one store at a time: its projects, its collections, the names of each environment, and the change log. A value stays hidden until the operator reveals it. The page can still change: this section gives only the facts that an agent needs to guide the operator. Agents never run `secrets ui` and never read values from it ([[dev-knw-nsec-rules]] § Rule 11). You can tell the operator about it, for example to set the missing values.
@@ -209,6 +234,7 @@ secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
 - **Add projects.** When the store has no projects, the side bar shows "Add projects from a folder" (also in the palette). It does the same as `secrets project add <folder>` (an agent can run that command for the operator). It writes only `projects.toml`.
 - **The lock.** The page locks after 15 minutes with no request (`--idle <minutes>`, 1 to 1440), and when the operator clicks Lock. A reload, Lock, and the idle lock ask for the click "Unlock". The lock and Quit delete the Undo records of the server.
 - **The hidden values.** A list never holds a value. The page shows 8 dots for a hidden value. A reveal gives one value and hides it again after 30 seconds, on blur, and on a change of the selection. Copy works without a reveal, and the page clears the clipboard after 30 seconds when it can. The page compares values ("same as dev") with no reveal. Before each reveal or copy, the server writes one line in `<secrets home>/ui-reveal.log`: the time, the identity, the store, the environment, the name, and show or copy, never the value.
+- **The Vault view.** Vault in the side bar of the store opens its entries: a tree by the first part of the name, with the group, and a lock icon for an entry that the identity cannot open. The text stays hidden until Show; it hides again after 30 seconds, on a blur, and at a selection change. Copy puts the text on the clipboard with no reveal and clears it after 30 seconds while the page has focus. Each Show and Copy writes one line in `ui-reveal.log` first (`vault=<group> name=<name>`, never the text). Edit shows the text in a field; Save refuses when another machine changed the entry, and the page keeps the text in the field. Remove needs the typed name of the entry. The lock (idle or Lock) and Quit drop a shown text and a changed text with no question.
 - **Writes.** Each write of the page uses the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. A write to `prod` or `deploy` needs the typed environment name. An import makes one store commit for each environment. The page changes `secrets.toml`, `secrets.local.toml`, and `.gitignore` with the code of the setup commands; it does not commit the project repository. The terminal shows one line for each write and each sync, with names only.
 - **A part of a write.** A write that changes the store and `secrets.toml` (an import with bind, an added variable, the removal of a variable, an Undo) can stop after one part. Then the page shows `Only a part of the change was saved.` (`PARTIAL_WRITE`) and offers "Undo the saved part" for 60 seconds. The terminal line names the store commits that stay and the file. The store commits stay pushed. To remove a variable, the page changes `secrets.toml` first and unsets the store values after it.
 - **A flagged store name.** The page cannot unset a store name that the secret detector flags, also not with "Remove the variable". The operator uses `secrets unset <name> --env <env>` in a terminal.

@@ -1,5 +1,5 @@
 ---
-description: "Ask the operator for a missing value or key the right way: the variable, the secret name, the environment, and the exact command for the operator's own terminal (secrets set) or the page of secrets ui; then continue with secret <cmd>; never a value in the chat"
+description: "Ask the operator for a missing value or key the right way: the variable, the secret name, the environment, and the exact command for the operator's own terminal (secrets set) or the page of secrets ui; ask the operator to do a step that needs a vault text (a password, a login); then continue with secret <cmd>; never a value or a vault text in the chat"
 ---
 
 > [!important] THIS FILE IS AN INSTRUCTION. WHEN REFERENCED IT IS MEANT TO BE TAKEN AS AN ACTION.
@@ -8,11 +8,11 @@ Run `flint shard start nsec` if you haven't already.
 
 # Skill: Request a Value or a Key
 
-Ask the operator to write a missing value, or to make or add a key. The operator runs the command in their own terminal. The value never goes through you.
+Ask the operator to write a missing value, or to make or add a key, or to do a step that needs a vault text. The operator runs the command in their own terminal. The value or the vault text never goes through you.
 
 # Input
 
-- The source of the request: the `✘ <n> variable(s) have no value in env <env>` error of `secret`, a `fail` line of `secrets doctor`, or a key problem
+- The source of the request: the `✘ <n> variable(s) have no value in env <env>` error of `secret`, a `fail` line of `secrets doctor`, a key problem, or a task that needs a text from the vault
 - The project: its name and the path of its `secrets.toml`
 - The reason: what the value or the key is for
 
@@ -51,7 +51,7 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    ```
 
    - You never run `secrets ui` yourself, and you never open its page or its login link ([[dev-knw-nsec-rules]] § Rule 11). Way (b) is for the operator only. The page needs an identity in `identities.toml`: with no identity, the page shows its first setup. Way (a) works on each machine.
-   - The page writes with the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. It shows a write error with a fixed text. Read the text that the operator sends with [[dev-sk-nsec-diagnose]]. `Only a part of the change was saved.` (`PARTIAL_WRITE`) means that a part of the write stays: the operator decides about "Undo the saved part" (60 seconds). Then run step 7 again. The page cannot unset a store name that the secret detector flags: for that name, give the operator `secrets unset <name> --env <env>`.
+   - The page writes with the write path of the CLI: the lock, the policy check, the secret scan, the commit, and the push. It shows a write error with a fixed text. Read the text that the operator sends with [[dev-sk-nsec-diagnose]]. `Only a part of the change was saved.` (`PARTIAL_WRITE`) means that a part of the write stays: the operator decides about "Undo the saved part" (60 seconds). Then run step 8 again. The page cannot unset a store name that the secret detector flags: for that name, give the operator `secrets unset <name> --env <env>`.
    - `secrets set` uses the identity that the CLI selects for the operator's shell ([[dev-knw-nsec-model]] § Identities and the key selection). Do not add `--identity` to the command unless the operator names the identity.
    - Outside the project folder, the operator adds `--store <local store name>` or `--mapping <path>` to the command.
    - A successful `secrets set` prints `set  <name>  env <env>  store <store> @ <revision>`, or `unchanged  …` when the store already has that value. Both exit 0. Neither shows a value.
@@ -99,19 +99,34 @@ Ask the operator to write a missing value, or to make or add a key. The operator
    - When the key is in another file, the operator can set `SOPS_AGE_KEY_FILE` to that file in place of step 1a.
    - On a new machine, the operator can also run `secrets setup` in their own terminal and pick "join a store of your team". It makes the key, shows the id, the public key, the fingerprint, and the exact admin command, and clones the store when the admin has added the machine ([[dev-knw-nsec-setup]] § A new machine for a store).
    - After the admin adds the key, run step 4 yourself. Its plain doctor must run before clone or sync. Then run `secrets doctor --online` with the same mapping and store options.
-5. **Send the request.**
+5. **Write the request for a vault text.** Use this shape when a task needs a password, a login, recovery codes, a private key, or another text from the vault ([[dev-knw-nsec-rules]] § Rule 14). You never read the text: the operator does the step that needs it.
+   - Run `secrets vault list` to find the entry name and its group (names only; it decrypts nothing). Never run `secrets vault show`, `vault edit`, or `vault set`, and never read the clipboard.
+
+   ```text
+   The task needs a text from the vault: <what, for example the password of the AWS root account>.
+   Vault entry: <entry name> (group <group>)   (or: I do not know the entry name)
+   I do not read vault texts. Please do this step yourself: <the exact step, for example "sign in to the AWS console and create the access key">.
+   You can see the text in your own terminal with: secrets vault show <entry name> (or --copy: the CLI clears the clipboard after 30 s)
+   Tell me when the step is done. Do not send me the text, and do not put it in a file, a command, or a message for me.
+   ```
+
+   - When the task needs the text in the process environment of a program, it is a value of an environment, not a vault use. Tell the operator. The operator decides. Never tell the operator to put a value of an environment into the vault, or a vault text into `secrets.toml`.
+   - A machine that is not in the group of the entry shows `no access` in `secrets vault list`. Report it. Do not ask for group access unless the operator says so.
+   - When the operator pastes the text anyway, follow step 7.
+6. **Send the request.**
    - In an interactive session, write it in your reply and wait for the operator.
    - In a headless session, follow [[dev-hinit-nsec]]: put the request in your result as a blocker. Do not guess and do not wait in a loop.
-6. **Never accept a value.** Never ask the operator to paste a value into the chat, a file, a message, or a command. If the operator pastes a value anyway:
+7. **Never accept a value.** Never ask the operator to paste a value or a vault text into the chat, a file, a message, or a command. If the operator pastes one anyway:
    - do not repeat it and do not use it;
    - tell the operator that the value is now in the session transcript;
    - follow [[dev-knw-nsec-rules]] § If a value leaks (the operator replaces the value at its provider).
-7. **Check the result.** After the operator acts (with `secrets set` or in `secrets ui`), run plain `secrets doctor` with the task's mapping, store, and environment options. Keep the lines about local changes, unpushed commits, and links. Then run `secrets doctor --online` with the same options, or run `secret <cmd>` again. The cached clone can be older than a remote change. A successful write on this machine already updates its clone. The `fail` lines for these names must be gone.
-8. **Continue the task.** Run the program with `secret <cmd>` ([[dev-sk-nsec-run_app]]). Do not read the values from the UI or from `secrets export` to check them.
+8. **Check the result.** After the operator acts (with `secrets set` or in `secrets ui`), run plain `secrets doctor` with the task's mapping, store, and environment options. Keep the lines about local changes, unpushed commits, and links. Then run `secrets doctor --online` with the same options, or run `secret <cmd>` again. The cached clone can be older than a remote change. A successful write on this machine already updates its clone. The `fail` lines for these names must be gone.
+9. **Continue the task.** Run the program with `secret <cmd>` ([[dev-sk-nsec-run_app]]). Do not read the values from the UI or from `secrets export` to check them.
 
 # Output
 
 - One request to the operator with each missing value or key, the reason, and the exact commands
 - No value in the request, in your context, or in a file
 - After the operator acts: a `secrets doctor` result or a `secret <cmd>` run without the missing values
-- Never a `secrets ui` run, a page read, or an open of its login link by you
+- For a vault text: one request for the step of the operator, with the entry name only
+- Never a `secrets ui` run, a page read, an open of its login link, a `vault show|edit|set` run, or a clipboard read by you

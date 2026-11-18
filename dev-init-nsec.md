@@ -5,7 +5,7 @@ required-reading:
 
 # NUU Secrets (nsec)
 
-This shard teaches agents to use NUU Secrets safely. With it, you run apps with their secrets, map the variables of a project, and find problems. You never see, write, or move a value.
+This shard teaches agents to use NUU Secrets safely. With it, you run apps with their secrets, map the variables of a project, and find problems. You never see, write, or move a value or a vault text.
 
 ## What NUU Secrets Is
 
@@ -26,7 +26,8 @@ NUU Secrets keeps the secrets of a team in one encrypted Git store and gives the
 - **Collections.** The first segment of a secret name is its collection: `openai` in `openai/api-key`. `collections.toml` can give a collection a description, a source URL, and a warning window. `secrets collection list` shows them.
 - **Expiry dates.** The operator can give a secret one expiry date in each environment (`metadata.toml`). `secret <cmd>`, `export`, `doctor`, and `store sync` warn when a date is near (`due`) or past (`expired`). `secrets expiry list` shows the dates.
 - **The change log.** Each store write adds its changes to `changes.jsonl` in the store: names, environments, dates, and the recipient id of the writer, never a value. `secrets log` shows it. When a ref has no value, the CLI follows the change log: the error says `moved to secret://<new name>` or `removed`. `secrets refs` shows the state of each ref, and `secrets refs fix` rewrites the moved refs (with the approval of the operator).
-- **The UI.** `secrets ui` is a local web page for the operator: the stores, the projects, the collections, the change log, and the values (hidden until a reveal). The operator can set values there. You never run it and never read values from it.
+- **The vault.** Free text that is not an environment variable: passwords, logins, recovery codes, private keys. Each vault entry is encrypted for the machines of one group (`dev` or `prod`). The vault is not part of the environments: `secret <cmd>` never gives a vault entry to a program. You never read or write a vault text. `secrets vault list` shows the names only.
+- **The UI.** `secrets ui` is a local web page for the operator: the stores, the projects, the collections, the change log, the vault, and the values and vault texts (hidden until a reveal). The operator can set values and vault texts there. You never run it and never read a value or a vault text from it.
 
 The full model is in [[dev-knw-nsec-model]]. The command reference, the exit statuses, and the known limits are in [[dev-knw-nsec-cli]]. The setup of a new team, a new machine, and a project is in [[dev-knw-nsec-setup]].
 
@@ -37,16 +38,17 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 1. Never print, log, echo, or type a value. Not in output, a commit message, a Mesh note, a message, a test fixture, or a command.
 2. Never write a value to a file. No `.env` file, no `secrets export … > file`. If a tool needs a file, stop and ask the operator.
 3. Never pass a value as a process argument. A program reads a value from its process environment.
-4. Never read or copy a key file (the key file of each identity, `$SOPS_AGE_KEY_FILE`, `~/.config/sops/age/keys.txt`, and `<secrets home>/keys/`). For the public key, run `secrets keygen --public`. Never decrypt a store file. When a read stops with `… has SOPS metadata that the CLI does not decrypt. …`, stop and give the operator the exact message. Never edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `collections.toml`, `metadata.toml`, `changes.jsonl`, `identities.toml`, or `projects.toml`.
-5. Never run `secrets setup` (except `setup --print`), `set`, `edit`, `unset`, `keygen` (except `keygen --public` with no `--file`), `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, `logout`, `identity add|use|rm`, `project identity <name>`, `project identity --clear`, `project forget`, `mv`, `collection create|edit|rename|rm`, `expiry set|clear`, or `refs fix` (except `refs fix --dry-run`), unless the operator asks for or approves that exact command. Never add `--yes` to a push.
-6. Ask the operator for a missing value with the exact command: `secrets set <name> --env <env>`, or the page of `secrets ui`. Then continue with `secret <cmd>`. Never ask for a value in the chat. A moved or removed ref: see 13.
+4. Never read or copy a key file (the key file of each identity, `$SOPS_AGE_KEY_FILE`, `~/.config/sops/age/keys.txt`, and `<secrets home>/keys/`). For the public key, run `secrets keygen --public`. Never decrypt a store file or a vault file. When a read stops with `… has SOPS metadata that the CLI does not decrypt. …`, stop and give the operator the exact message. Never edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `collections.toml`, `metadata.toml`, `changes.jsonl`, `identities.toml`, or `projects.toml`.
+5. Never run `secrets setup` (except `setup --print`), `set`, `edit`, `unset`, `keygen` (except `keygen --public` with no `--file`), `recipient add|rm`, `store init`, `store fix-config`, `store remove`, `push`, `login`, `logout`, `identity add|use|rm`, `project identity <name>`, `project identity --clear`, `project forget`, `mv`, `collection create|edit|rename|rm`, `expiry set|clear`, `refs fix` (except `refs fix --dry-run`), or `vault mv|rm`, unless the operator asks for or approves that exact command. Never add `--yes` to a push.
+6. Ask the operator for a missing value with the exact command: `secrets set <name> --env <env>`, or the page of `secrets ui`. Then continue with `secret <cmd>`. Never ask for a value in the chat. A password or a login from the vault: see 14. A moved or removed ref: see 13.
 7. You are a user. You have the access of your operating-system user. The rules prevent accidents. They are not a security boundary.
 8. If a value leaks, stop, do not repeat it, and tell the operator the variable and the place. The operator replaces the value.
 9. Never set `SECRETS_GITLEAKS=0`, and never remove, rename, or hide gitleaks on `PATH`. Before a store write that this shard allows, check for an inherited `SECRETS_GITLEAKS=0` and report it. When the secret scan stops a write (`SECRET_SCAN_FOUND`, `SECRET_SCAN_FAILED`), stop and report. See [[dev-knw-nsec-rules]] § Rule 10.
 10. Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` only with the commands of the CLI (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`, and `refs fix` with the approval of the operator), not by hand. Write a target table or change the store URL only with the ids or the URL that the operator gives.
-11. Never run `secrets ui`, also when the operator asks. Never open its URL or login link, its page, or its API, and never read a value from it. The UI is for the operator. See [[dev-knw-nsec-rules]] § Rule 11.
+11. Never run `secrets ui`, also when the operator asks. Never open its URL or login link, its page, or its API, and never read a value or a vault text from it. The UI is for the operator. See [[dev-knw-nsec-rules]] § Rule 11.
 12. Use the identity that the CLI selects. Do not add `--identity`, and do not set `SECRETS_IDENTITY` or `SOPS_AGE_KEY_FILE`, unless the operator names the identity. When a command or `doctor` reports `LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, an unknown identity, `PROJECT_INDEX`, the link warning, or the warning about the identity of a parent project, stop and tell the operator the exact message and the remedy of the CLI. See [[dev-knw-nsec-rules]] § Rule 12.
 13. A missing ref with a `moved` hint: run `secrets refs fix --dry-run` and ask the operator to approve the fix. A `removed` ref: ask the operator what to do. An expiry warning (`due` or `expired`): tell the operator; never run `expiry set|clear` yourself. See [[dev-knw-nsec-rules]] § Rule 13.
+14. Never read or write a vault text. Never run `secrets vault show` (also `--copy`), `secrets vault edit`, or `secrets vault set`, also when the operator asks: the operator runs them in a terminal. Never read the clipboard. When a task needs a password, a login, or another text from the vault, ask the operator to do that step. `secrets vault list` is allowed (names only). `secrets vault mv` and `secrets vault rm` need the approval of the operator. The vault is not part of the environments: never tell the operator to put a value of an environment into the vault, or a vault text into `secrets.toml`. See [[dev-knw-nsec-rules]] § Rule 14.
 
 ## Situations
 
@@ -59,7 +61,7 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 | `secret` or `secrets` fails, or access is not correct | [[dev-sk-nsec-diagnose]] |
 | A store write stops with the secret scan, or `doctor` warns about gitleaks | [[dev-sk-nsec-diagnose]] (step 10) and [[dev-knw-nsec-rules]] § Rule 10 |
 | `doctor` warns `.gitleaks.toml differs from the text that the CLI generates` | [[dev-sk-nsec-diagnose]] (step 4): give the operator the exact `secrets store fix-config --store <name>` command; never run it |
-| A read stops with `✘ The store file <file> of store <store> has SOPS metadata that the CLI does not decrypt. SOPS did not run, and nothing was read.` (`UNSAFE_STORE`) | Stop. Do not touch the file. [[dev-sk-nsec-diagnose]] (step 4): give the operator the exact message |
+| A read stops with `✘ The store file <file> of store <store> has SOPS metadata that the CLI does not decrypt. SOPS did not run, and nothing was read.` (`UNSAFE_STORE`), or with the same message for a vault file (`UNSAFE_VAULT`) | Stop. Do not touch the file. [[dev-sk-nsec-diagnose]] (step 4): give the operator the exact message |
 | A value or a key is missing | [[dev-sk-nsec-request_value]] |
 | A command or `doctor` reports an identity problem (`LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, an unknown identity, a parent-identity warning) | Stop. [[dev-sk-nsec-diagnose]] (step 6) and [[dev-knw-nsec-rules]] § Rule 12 |
 | The operator asks about identities, the project index, or `secrets ui` | [[dev-knw-nsec-setup]] § Identities, § The project index, § The UI; give the operator the commands |
@@ -67,7 +69,9 @@ The complete rules are in [[dev-knw-nsec-rules]]. Read them before your first `s
 | Prepare a push to Vercel, Convex, or Railway | [[dev-sk-nsec-plan_push]] |
 | A missing ref says `moved to secret://…` or `removed on …` (`secret`, `doctor`, `plan`, or `secrets refs`) | [[dev-sk-nsec-diagnose]] (step 7): `secrets refs fix --dry-run`, then ask the operator |
 | stderr or `doctor` has an expiry warning (`expires on …` or `expired on …`) | Tell the operator the variable, the secret name, the environment, and the date. [[dev-knw-nsec-rules]] § Rule 13 |
-| The operator asks about collections, expiry dates, or the change log | [[dev-knw-nsec-setup]] § Collections, expiry dates, and the change log; give the operator the commands |
+| A task needs a password, a login, recovery codes, or a private key from the vault | Do not read it. Ask the operator to do the step that needs it ([[dev-sk-nsec-request_value]], step 5). [[dev-knw-nsec-rules]] § Rule 14 |
+| The task asks you to run `secrets vault show`, `vault edit`, or `vault set` | Do not run it, also when the operator asks. Give the operator the command for their own terminal. [[dev-knw-nsec-rules]] § Rule 14 |
+| The operator asks about collections, expiry dates, the change log, or the vault | [[dev-knw-nsec-setup]] § Collections, expiry dates, and the change log, and § The vault; give the operator the commands |
 | A question about the store, names, collections, targets, or literals | [[dev-knw-nsec-model]] |
 | A question about a command, an option, an exit status, or a message | [[dev-knw-nsec-cli]] |
 
@@ -99,6 +103,7 @@ secrets refs                             # the state of each ref: ok, moved, rem
 secrets refs fix --dry-run               # the plan of the ref fix; without --dry-run: only with the approval of the operator
 secrets collection list                  # the collections and their number of names
 secrets expiry list --due                # the secrets that are due or expired
+secrets vault list                       # the vault entries: names, groups, access; never a text
 secrets keygen --public                  # the public key of this machine; makes no key
 secrets setup --print                    # the state of each setup step and the commands that remain; changes nothing
 secrets init-project --name <project> --store <url>   # also adds .env* and secrets.local.toml to .gitignore
@@ -112,4 +117,4 @@ secrets plan <target> --env <env>        # what a push sends: names and statuses
 
 Use the `secrets` command that is on `PATH`. Its build mode (prod or dev) changes the default secrets home. See [[dev-knw-nsec-model]] § The store.
 
-When the shell cannot find `secrets`, do not install it yourself. Ask the operator to install the CLI: `npm install -g @nuucognition/secrets-cli@0.2.0-beta.1` (Node.js 24 or later). See [[dev-knw-nsec-cli]] § Install.
+When the shell cannot find `secrets`, do not install it yourself. Ask the operator to install the CLI: `npm install -g @nuucognition/secrets-cli@0.3.0-beta.0` (Node.js 24 or later). See [[dev-knw-nsec-cli]] § Install.
