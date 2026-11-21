@@ -1,10 +1,10 @@
 ---
-description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup, the identity changes, and the changes of names, collections, expiry dates, refs, and vault entries); how to ask for a value; the secret scan of store commits; agents never use secrets ui; use the identity that the CLI selects and stop on an identity problem; moved and removed refs and expiry warnings; agents never read or write a vault text; what to do after a leak"
+description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; secrets pull and the block of .env.local (never read or change it, change a value in the store, report a managed name outside the block); no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup, the identity changes, and the changes of names, collections, expiry dates, refs, and vault entries); how to ask for a value; the secret scan of store commits; agents never use secrets ui; use the identity that the CLI selects and stop on an identity problem; moved and removed refs and expiry warnings; agents never read or write a vault text; what to do after a leak"
 ---
 
 # Knowledge: Agent Rules
 
-These rules apply to each task that touches NUU Secrets: a project with a `secrets.toml`, a `secret <cmd>` run, a `.env` file, a key, or a store. Read all the rules before you run a `secrets` or `secret` command. When a rule and a task do not agree, the rule wins: stop and tell the operator.
+These rules apply to each task that touches NUU Secrets: a project with a `secrets.toml`, a `secrets pull`, a `.env` file, a key, or a store. Read all the rules before you run a `secrets` command. When a rule and a task do not agree, the rule wins: stop and tell the operator.
 
 ## Words
 
@@ -21,6 +21,9 @@ This shard uses one word for one thing.
 | vault entry | One entry of the vault: an entry name (for example `aws/root-login`), a group (`dev` or `prod`), and an encrypted text. An entry name is not secret. |
 | vault text | The plaintext of a vault entry, for example a password, a login, recovery codes, or a private key. Agents never read or write it (Rule 14). |
 | moved ref, removed ref | A `secret://` ref of a project that has no value, and that the change log moved to another name (`moved`) or removed (`removed`). |
+| block | The lines of the `.env.local` of a project between the start marker `# >>> nuu-secrets · store <revision> (<date>) · env <env> · sha256 <hash> · do not edit: …` and the end marker `# <<< nuu-secrets <<<`. `secrets pull` owns these lines. They hold values. All other lines of `.env.local` belong to the person or to another tool (for example `npx convex dev` or Vercel). |
+| pull | One write of the block from the store by `secrets pull`. The direction is one way: store → `.env.local`. |
+| managed name | A variable that `secrets.toml` or `secrets.local.toml` gives to the target `local`. Its line belongs in the block. |
 | variable | An environment variable of a process, for example `CLERK_SECRET_KEY`. A variable name is not secret. |
 | environment | The store environment that `--env` selects: `dev`, `preview`, `prod`, or `deploy`. |
 | store | The Git repository of the team that holds the encrypted values (SOPS + age). |
@@ -51,35 +54,32 @@ Never print, log, echo, or type a value. This applies to each of these places:
 - A log line that you add to an app.
 - A command that you type. A value in a command goes into the shell history and into the transcript.
 
-Do not run a command that shows the process environment: `env`, `printenv`, `set`, `export -p`, `echo "$VAR"`, `cat /proc/<pid>/environ`, or a script that prints `process.env`. This rule also applies under `secret`.
+Do not run a command that shows the process environment: `env`, `printenv`, `set`, `export -p`, `echo "$VAR"`, `cat /proc/<pid>/environ`, or a script that prints `process.env`. Do not run a command that shows a line of `.env.local` (Rule 15).
 
-To check that a variable has a value, test it and do not print it:
+To check that a variable has a value, use the safe signals. None of them shows a value:
 
-```sh
-secret sh -c 'test -n "$CLERK_SECRET_KEY" && echo "CLERK_SECRET_KEY is set"'
-```
+- The `pull` line on stderr gives the count of variables and the count of `optional` entries with no value. A required `ref` with no value stops the pull, so a successful pull proves that each required variable of the target `local` is in the block.
+- `secrets pull --check` says `current` or `stale`, with the names only.
+- `secrets doctor` names each required secret name that has no value, and checks the block.
 
-Use single quotes. Then the inner shell reads the variable, and your shell does not expand it.
-
-Use the safe signals first. The `secret:` line on stderr gives the count of variables. `secrets doctor` names each required secret name that has no value. Neither shows a value.
-
-An app can show a value in its output: debug output, a configuration dump, or an error with a connection URL. Do not start an app with debug or dump options under `secret`. If a value shows, follow [If a value leaks](#if-a-value-leaks).
+An app can show a value in its output: debug output, a configuration dump, or an error with a connection URL. Do not start an app with debug or dump options. If a value shows, follow [If a value leaks](#if-a-value-leaks).
 
 ## Rule 2 — Never write a value to a file
 
-- Do not write `.env`, `.env.local`, `.env.*.local`, or another file that holds values.
+- Do not write `.env`, `.env.local`, `.env.*.local`, or another file that holds values. The one exception: `secrets pull` writes the block of `.env.local` (Rule 15). You run the command; you never write a line of the file yourself.
 - Do not send the output of `secrets export` to a file (`>`, `>>`, or `tee`).
 - Do not copy a value into a test fixture, a configuration file, a script, or a temporary file.
-- Do not open or show the content of a `.env*` file. This also applies to an example file such as `.env.example`, also when Git tracks it. Any of these files can hold a value, and a file can be a symbolic link to another file. `secrets doctor` names the managed variables in the `.env*` files, and it shows names only. Get the variable names of an app from its source code ([[dev-sk-nsec-setup_project]], step 4).
+- Do not open or show the content of a `.env*` file. This also applies to `.env.local` after a pull, and to an example file such as `.env.example`, also when Git tracks it. Any of these files can hold a value, and a file can be a symbolic link to another file. `secrets doctor` names the managed variables in the `.env*` files, and it shows names only. Get the variable names of an app from its source code ([[dev-sk-nsec-setup_project]], step 4).
 - If a tool can read its configuration only from a file, stop. Tell the operator the tool and the file. The operator decides.
 - Never run `vercel env pull`. It writes the values of a Vercel environment to a file.
-- `secret <cmd>` writes no `.env` file. A file with values comes only from a redirect of `secrets export` (for example `--format dotenv > .env.local`), and you never make one. `npx convex dev` writes its own `.env.local` with `CONVEX_DEPLOYMENT` and `NEXT_PUBLIC_CONVEX_URL`: the Convex tool owns these names, and a push never sends them to Convex. Keep them out of `secrets.toml` unless the operator decides otherwise, and do not open or change that file.
+- `secrets pull` writes only the block of `.env.local`, only for `dev` and `preview`, and keeps each other line byte for byte. Never make another file with values, for example with a redirect of `secrets export` (`--format dotenv > .env.local`): it would replace the lines of other tools, and it has no block.
+- `npx convex dev` writes its own lines into the same `.env.local` (`CONVEX_DEPLOYMENT`, `NEXT_PUBLIC_CONVEX_URL`), outside the block. The Convex tool owns these names, and a push never sends them to Convex. Keep them out of the target `local` of `secrets.toml` unless the operator decides otherwise: a managed name outside the block stops each pull (Rule 15). Do not open or change these lines.
 
 ## Rule 3 — Never pass a value as a process argument
 
 Other processes can read the arguments of a process. A program must read a value from its process environment or from stdin.
 
-- Do not write a command in which a shell expands a value into the arguments of a program. For example, `secret sh -c 'some-cli "$API_TOKEN"'` gives the value to `some-cli` as an argument. Use a program that reads the variable itself.
+- Do not write a command in which a shell expands a value into the arguments of a program. For example, a shell that loads `.env.local` and runs `some-cli "$API_TOKEN"` gives the value to `some-cli` as an argument. Use a program that reads the variable itself. Never load `.env.local` into a shell (`source .env.local`, `set -a`).
 - `secrets bind --value` is only for a literal that is not secret. Never give a value to `--value`. `bind` refuses some values that look like secrets, but its check does not find all of them.
 - Do not give a value to a platform CLI (Vercel, Convex, Railway) as an argument.
 
@@ -87,7 +87,7 @@ Other processes can read the arguments of a process. A program must read a value
 
 - Do not open, print, copy, move, or change a key file. This applies to each key file of each identity (the `KEY FILE` column of `secrets identity list`) and to each file in `<secrets home>/keys/`. To check the key, run `secrets doctor` (the key selection, the path, the mode, and the fingerprint), `secrets whoami` (the identity, the fingerprint, and the path), `secrets identity list` (the public key of each identity), or `secrets keygen --public` (the full public key of the selected key file; it makes no key). The fingerprint is the last 8 characters of the public key.
 - Do not read or print the variable `SOPS_AGE_KEY`: it can hold a private key. Do not run the command of `SOPS_AGE_KEY_CMD`.
-- Do not decrypt a store file. Do not run `sops` on a store file. An error of `secret` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
+- Do not decrypt a store file. Do not run `sops` on a store file. An error of `secrets pull` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
 - When a read stops with ``✘ The store file <file> of store <store> has SOPS metadata that the CLI does not decrypt. SOPS did not run, and nothing was read.`` (`UNSAFE_STORE`), or with the same message for a vault file (``✘ The vault file <path> of store <store> has SOPS metadata …``, `UNSAFE_VAULT`), stop. The file has a key of another system (for example `hc_vault`, `kms`, or `pgp`), an unknown metadata key, or no SOPS metadata, and SOPS could send a credential of this machine to that system. Do not open, edit, or decrypt the file, and do not set a variable of another key system. Give the operator the exact message ([[dev-sk-nsec-diagnose]], step 4).
 - Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `collections.toml`, `metadata.toml`, `changes.jsonl`, `stores.toml`, `identities.toml`, or `projects.toml` by hand. Do not open, decrypt, copy, or change a file under `vault/` of a store clone (Rule 14). Do not add an `identity` key to `secrets.local.toml`: a project file never selects an identity, and the CLI ignores the key with a warning (Rule 12).
 - Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` with the commands of Rule 6 (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), or with `refs fix` after the approval of the operator (Rule 13), not by hand. These commands check the result and refuse a bad change. When a command cannot edit an unusual form of the file (`MAPPING_EDIT`), report it to the operator.
@@ -119,6 +119,7 @@ The operator enters values, manages keys, and owns the names, the collections, t
 | `secrets expiry set`, `secrets expiry clear` | Set or remove the expiry date of one secret in one environment. See Rule 13. |
 | `secrets refs fix` (without `--dry-run`) | Rewrites each moved ref in `secrets.toml` and `secrets.local.toml`. `secrets refs fix --dry-run` is not on this list (see Rule 6). See Rule 13. |
 | `secrets vault mv`, `secrets vault rm` | Rename a vault entry, move it to the other group, or remove it. See Rule 14. |
+| `secrets pull --force` | Replaces a block of `.env.local` that a person or a program changed after the last pull. `secrets pull` without `--force` is not on this list (see Rule 6). See Rule 15. |
 
 `secrets ui`, `secrets vault show`, `secrets vault edit`, and `secrets vault set` are not on this list: an agent never runs them, also when the operator asks (Rules 11 and 14).
 
@@ -134,7 +135,9 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 
 | Command | Use |
 |---|---|
-| `secret <cmd>`, `secrets run` | Run a program with the values in its process environment. See [[dev-sk-nsec-run_app]]. |
+| `secrets pull` | Write the `local` values of the project (`dev` or `preview`) into the block of `.env.local`. Then run the normal command of the program. Without `--force`. See Rule 15 and [[dev-sk-nsec-run_app]]. |
+| `secrets pull --check` | Show whether the block is current (`current` or `stale`, with names only). It writes nothing. Run it before each pull. |
+| `secrets pull --all`, `secrets pull --check --all` | The same for each project of the project index in the current Git repository. A refusal of one project stops the pull before the first write. |
 | `secrets doctor` | Check the tools, the key, the stores, the mapping, and the project. Without `--online`, it changes nothing. See [[dev-sk-nsec-diagnose]]. |
 | `secrets doctor --online` | The same checks after a refresh: it fetches each checked clone and resets it to the remote. The reset discards the local changes of an interrupted command in the clone (a cache that the CLI owns). It never clones a missing store. Run it only after a plain `secrets doctor` with the same options. |
 | `secrets keygen --public` | Print the full public key of the key file of this machine. It makes no key and never prints the private key. Use it only with no `--file`. |
@@ -151,7 +154,7 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 | `secrets collection list` | List the collections: the record, the number of names in each environment, the warning window, and the next expiry date. No key needed. |
 | `secrets expiry list` | List the expiry dates with their state (`ok`, `due`, `expired`). No key needed. |
 | `secrets vault list` | List the vault entries: the name, the group, the last change, and the access of this machine. It decrypts nothing and shows no text. See Rule 14. |
-| `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secret` without `--offline` clones the store when necessary. |
+| `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secrets pull` without `--offline` clones the store when necessary. |
 | `secrets setup --print` | Show the state of each setup step and the commands that remain. It changes nothing. See [[dev-knw-nsec-setup]]. |
 | `secrets vars` | List the variable names that the code reads, and their mapping state. Names and paths only. |
 | `secrets init-project`, `secrets bind`, `secrets unbind` | Write `secrets.toml` (or, with `--local`, `secrets.local.toml`): names and targets, no values. `init-project` also adds the `.gitignore` lines. See [[dev-sk-nsec-setup_project]]. |
@@ -166,15 +169,16 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 
 `secrets export` writes values to stdout. If you run it in your shell, the values go into your context.
 
-- Use `secret <cmd>` when you can. It covers almost every case.
+- Use `secrets pull` and the normal command of the program when you can. It covers almost every case.
 - Use `secrets export` only when a tool must read the values from stdin. Pipe the output directly into that tool, in the same command. That tool must not print what it reads.
 - Never run `secrets export` without a pipe. Never pipe it into a program that shows its input, for example `cat`, `less`, `head`, `jq`, or `tee`.
-- Do not use `eval "$(secrets export --format shell)"`. The values then stay in your shell. Use `secret <cmd>`.
+- Do not use `eval "$(secrets export --format shell)"`. The values then stay in your shell. Use `secrets pull`.
+- Never redirect `secrets export` into `.env.local` or into another file (Rule 2).
 - Do not use `secrets export --to vercel`, `--to convex`, or `--to railway` to send values to a platform. Only the operator sends values to a platform, with `secrets push` (Rule 9).
 
 ## Rule 7 — Ask the operator for values and keys
 
-When a value or a key is missing, ask the operator. Give the variable, the secret name, the environment, and the exact command for the operator. A missing ref with a `moved` or `removed` hint is not a missing value: follow Rule 13. A vault text is not a value of an environment: when a task needs a password, a login, or another text from the vault, follow Rule 14. The operator sets a value with `secrets set <name> --env <env>` in their own terminal, or in the page of `secrets ui` (Rule 11). Then you continue with `secret <cmd>`. Never ask the operator to paste a value into the chat, a file, or a message. Never guess a value, and never use a placeholder value that looks real. Use [[dev-sk-nsec-request_value]].
+When a value or a key is missing, ask the operator. Give the variable, the secret name, the environment, and the exact command for the operator. A missing ref with a `moved` or `removed` hint is not a missing value: follow Rule 13. A vault text is not a value of an environment: when a task needs a password, a login, or another text from the vault, follow Rule 14. The operator sets a value with `secrets set <name> --env <env>` in their own terminal, or in the page of `secrets ui` (Rule 11). Then you continue with `secrets pull`. Never ask the operator to paste a value into the chat, a file, or a message. Never guess a value, and never use a placeholder value that looks real. Use [[dev-sk-nsec-request_value]].
 
 ## Rule 8 — Platform targets need the operator
 
@@ -229,7 +233,7 @@ In a headless session, a scan refusal and an inherited `SECRETS_GITLEAKS=0` are 
 - **Never read values from the UI.** This also applies to a vault text, and to the actions of the page (for example "Fix the refs" and the expiry form). Do not open the URL or the login link of the UI. Do not open the page in a browser or in a browser tool. Do not send a request to its server or its API (`curl`, `fetch`, or another HTTP client to `127.0.0.1:<port>`). Do not read its launch file: it holds the login token.
 - **A login link is a credential.** The link has the form `http://127.0.0.1:<port>/#t=<token>`. When the operator sends you a link of this form, do not open it, and do not repeat the token. Tell the operator that the link is now in the session transcript. The token works one time, in the first 60 seconds. For a new link, the operator stops `secrets ui` and runs it again.
 - **The reveal log is for the operator.** `<secrets home>/ui-reveal.log` holds one line for each reveal or copy: the time, the identity, and the store, the environment, and the name (for a literal: the project and the variable), never the value; for a vault entry: the group and the entry name, never the text. Do not change or delete it.
-- **What you do.** You use `secret <cmd>` to run a program with the values. You ask the operator to set a value in the UI or with `secrets set` ([[dev-sk-nsec-request_value]]). The writes of the page are operator writes: they use the write path of the CLI (the lock, the policy check, the secret scan, the commit, and the push). When the operator sends you an error of the page, read it as a message of the CLI ([[dev-sk-nsec-diagnose]]).
+- **What you do.** You use `secrets pull` and the normal command to run a program with the values. You ask the operator to set a value in the UI or with `secrets set` ([[dev-sk-nsec-request_value]]). The writes of the page are operator writes: they use the write path of the CLI (the lock, the policy check, the secret scan, the commit, and the push). When the operator sends you an error of the page, read it as a message of the CLI ([[dev-sk-nsec-diagnose]]).
 
 ## Rule 12 — Identities: use the identity that the CLI selects
 
@@ -266,7 +270,7 @@ The change log records each change of a store write. The CLI uses it to explain 
 - **A removed ref.** The hint says `removed on <date> by <recipient id>` (or `moved to …, then removed on …`). The store has no value for that name now. Ask the operator what to do: bind another name, remove the entry, or write a new value. Do not decide it yourself: do not `unbind` the entry, do not bind another name, and do not mark the entry `optional`.
 - **A ref that is not in the store** with no change-log entry is a missing value (Rule 7).
 - **A push.** `plan` and `push` stop on a moved ref, also on an `optional` ref. The refs change first (with the approval of the operator), then the plan.
-- **An expiry warning.** `secret <cmd>`, `run`, `export`, `doctor`, and `store sync` warn when the expiry date of a secret is near (`due`) or past (`expired`), for example ``secrets: warning: <VAR> (secret://<name>, <env>) expires on <date> (in <n> days). Rotate the key, then run `secrets expiry set <name> --env <env> --date <new date>`.`` The warning does not stop the command. Tell the operator the variable, the secret name, the environment, and the date. Do not run `secrets expiry set` or `secrets expiry clear`, and do not change a date to stop a warning. The operator replaces the key at its provider, then writes the new value and its date (`secrets set <name> --env <env> --expires <date>`). An `expired` key can make the program fail with an authentication error: report the warning with the failure. Never read the value to check it.
+- **An expiry warning.** `secrets pull`, `pull --check`, `export`, `doctor`, and `store sync` warn when the expiry date of a secret is near (`due`) or past (`expired`), for example ``secrets: warning: <VAR> (secret://<name>, <env>) expires on <date> (in <n> days). Rotate the key, then run `secrets expiry set <name> --env <env> --date <new date>`.`` The warning does not stop the command (a pull still writes the block). Tell the operator the variable, the secret name, the environment, and the date. Do not run `secrets expiry set` or `secrets expiry clear`, and do not change a date to stop a warning. The operator replaces the key at its provider, then writes the new value and its date (`secrets set <name> --env <env> --expires <date>`). An `expired` key can make the program fail with an authentication error: report the warning with the failure. Never read the value to check it.
 - **A move changes refs.** `secrets mv` and `secrets collection rename` change secret names. After such a change, the refs of the projects that use the old names are `moved`.
 
 In a headless session, a moved ref and a removed ref are blockers. An expiry warning is not a blocker: put it in your result. See [[dev-hinit-nsec]].
@@ -280,16 +284,32 @@ The vault keeps free text that is not an environment variable: passwords, logins
 - **Never touch a vault file.** Do not open, decrypt, copy, or change a file under `vault/` of a store clone (Rule 4). Do not write a file with a vault text, and do not send a text to the stdin of `secrets vault set`.
 - **What you can run.** `secrets vault list` shows the entry names, the groups, the last change, and the access of this machine. It decrypts nothing and shows no text (Rule 6). `secrets vault mv` and `secrets vault rm` need the approval of the operator (Rule 5): each one is a store write (Rule 10).
 - **A task needs a text from the vault.** For example a password for a login, recovery codes, or a private key. Ask the operator. Give the entry name (when `secrets vault list` shows it) and what the task needs. The operator does the step that needs the text, for example the login. Then you continue. Never ask the operator to paste the text into the chat, a file, a message, or a command. When the operator pastes it anyway, follow [If a value leaks](#if-a-value-leaks).
-- **The vault is not part of the environments.** `secret <cmd>`, `run`, `export`, `plan`, and `push` never give a vault entry to a program, and no `secrets.toml` entry maps a vault entry. Never tell the operator to put a value of an environment into the vault, or a vault text into `secrets.toml` (also not as a literal). When a program needs a text of the vault in its process environment, tell the operator. The operator decides.
+- **The vault is not part of the environments.** `secrets pull`, `export`, `plan`, and `push` never give a vault entry to a program or to `.env.local`, and no `secrets.toml` entry maps a vault entry. Never tell the operator to put a value of an environment into the vault, or a vault text into `secrets.toml` (also not as a literal). When a program needs a text of the vault in its process environment, tell the operator. The operator decides.
 - **The names are public.** The change log, `secrets log`, and `secrets store sync` name the vault entries that changed (the name and the group, never the text).
 
 In a headless session, a task that needs a vault text is a blocker. See [[dev-hinit-nsec]].
+
+## Rule 15 — `secrets pull` and the block of `.env.local`
+
+`secrets pull` writes the values of the target `local` into one block of the `.env.local` in the folder of the `secrets.toml`. It is the one command that writes values to the disk, and only for `dev` and `preview`. The block is as secret as the store values. The direction is one way: store → `.env.local`.
+
+- **Never read the block.** Never read, print, copy, or search the values in the block of `.env.local`. Do not open, print, search, or compare the file at all (`cat`, `less`, `head`, `grep`, `diff`, `git diff --no-index`, an editor, or a read tool of your harness): each line outside the block can hold a value too. The names, the counts, and the states come from `secrets pull`, `secrets pull --check`, and `secrets doctor`.
+- **Change a value in the store, never in `.env.local`.** Never edit, add, remove, or comment out a line of the block. When a value must change, the operator changes the store (`secrets set <name> --env <env>`, or the page of `secrets ui`). Then you run `secrets pull` again. A hand change of the block stops the next pull (`PULL_CHANGED_BLOCK`).
+- **`--force` needs the approval of the operator.** `secrets pull --force` replaces a block that was changed after the last pull. Run it only when the operator approves it for that project.
+- **A managed name outside the block.** When `secrets pull` stops with `✘ <path> sets names that secrets.toml gives to local, outside the block of NUU Secrets:` and the lines `  - line <n>: <VAR>` (`PULL_MANAGED_OUTSIDE`), report each line number and name to the operator. Do not delete, change, comment out, or move the line without the approval of the operator. Do not remove the target `local` of the name, and do not unbind it, to make the pull pass. The operator decides: remove the line, or remove the target `local` of the name in `secrets.toml` (for a name of another tool, for example `NEXT_PUBLIC_CONVEX_URL`, the usual decision is the second one). Never read the line to see its value.
+- **Pull before you run.** Before you run an app, run `secrets pull --check`. When it says `stale`, run `secrets pull`. Then run the normal command of the program. Never load `.env.local` into your shell (Rule 3).
+- **No production values on the disk.** `secrets pull` refuses `--env prod` and `--env deploy` (`PULL_ENV`). Do not try another way (`secrets export` with a redirect, a copy of a platform variable) to put a production value into a file.
+- **Git must ignore `.env.local`.** A pull refuses a `.env.local` that Git does not ignore (`PULL_NOT_IGNORED`): run `secrets project gitignore`. A pull also refuses a `.env.local` that Git tracks (`PULL_TRACKED`): the history can already hold values. Tell the operator. Run `git rm --cached .env.local` only with the approval of the operator.
+- **Links.** A pull never writes through a symbolic link (`PULL_LINK`). Do not remove or replace a link to pass the check. Report it.
+- **Project files.** Do not add `secrets pull` to the scripts of `package.json` (for example `predev`), to a `Makefile`, or to CI files. CI has no key.
+
+The steps are in [[dev-sk-nsec-run_app]]. In a headless session, a managed name outside the block, a changed block (a `--force` needs the operator), a broken block, a tracked `.env.local`, and a link are blockers. See [[dev-hinit-nsec]].
 
 ## Tests of the CLI itself
 
 This shard is for the use of NUU Secrets in projects. A task that tests the `secrets` CLI itself (not an app) needs a sandbox:
 
-- In each command that runs `secrets` or `secret`, set `HOME`, `SECRETS_HOME`, `NUU_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, and `TMPDIR` to temporary folders. Set `SOPS_AGE_KEY_FILE` to a file path in the temporary root folder (for example `<temp root>/home/keys.txt`). Unset `SOPS_AGE_KEY` and `SOPS_AGE_KEY_CMD`: SOPS can use them, and the SOPS default key file under `XDG_CONFIG_HOME`, as other key sources. Unset `SECRETS_GITLEAKS`: an inherited `SECRETS_GITLEAKS=0` turns off the secret scan of the test store (Rule 10). Unset `SECRETS_IDENTITY`: it selects an identity before `SOPS_AGE_KEY_FILE`. The temporary `SECRETS_HOME` has its own `identities.toml` and `projects.toml`, so the test does not change the identities or the project index of the operator.
+- In each command that runs `secrets`, set `HOME`, `SECRETS_HOME`, `NUU_HOME`, `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME`, and `TMPDIR` to temporary folders. Set `SOPS_AGE_KEY_FILE` to a file path in the temporary root folder (for example `<temp root>/home/keys.txt`). Unset `SOPS_AGE_KEY` and `SOPS_AGE_KEY_CMD`: SOPS can use them, and the SOPS default key file under `XDG_CONFIG_HOME`, as other key sources. Unset `SECRETS_GITLEAKS`: an inherited `SECRETS_GITLEAKS=0` turns off the secret scan of the test store (Rule 10). Unset `SECRETS_IDENTITY`: it selects an identity before `SOPS_AGE_KEY_FILE`. The temporary `SECRETS_HOME` has its own `identities.toml` and `projects.toml`, so the test does not change the identities or the project index of the operator.
 - Use test keys (`age-keygen`), a local bare Git repository as the store remote, and made-up test values.
 - Never read or change the real key file or the real store clones.
 - Delete the temporary folders at the end.
@@ -298,7 +318,7 @@ Only the prompt of such a task can allow the operator-only commands, and only in
 
 ## An agent is a user
 
-You have the access of your operating-system user. You can read the key file. You can decrypt each store file of the groups of this machine, also production values when this machine is in the group `prod`. You can read `/proc/<pid>/environ` of a process that `secret` started. The rules are a promise that you keep. They are not a lock.
+You have the access of your operating-system user. You can read the key file. You can decrypt each store file of the groups of this machine, also production values when this machine is in the group `prod`. You can read the `.env.local` of each project after a pull, and `/proc/<pid>/environ` of each process of the user. The rules are a promise that you keep. They are not a lock.
 
 - Do not test the rules.
 - Do not read a value to prove a weakness.
@@ -311,7 +331,7 @@ A leak is a value in your context, in output, in a file, in a commit, in a messa
 1. Stop the current work. Do not run a command that can show the value again.
 2. Do not repeat the value. Do not quote it in your report, also not a part of it.
 3. Tell the operator now. Give the variable, the secret name, the environment, and where the value went: the command, the file path, the commit, the message, or the log. Say that the session transcript holds the value.
-4. If you wrote the value to an untracked local file, delete that file and say so. If the value reached a commit, a push, a Mesh note, an Orbh message, or another shared place, do not try to remove it. The operator decides about a change of history.
+4. If you wrote the value to an untracked local file, delete that file and say so. Do not delete or change `.env.local`: tell the operator. The operator changes the store, then a pull replaces the block. If the value reached a commit, a push, a Mesh note, an Orbh message, or another shared place, do not try to remove it. The operator decides about a change of history.
 5. The operator replaces the value at its provider (rotation) and writes the new value with `secrets set <name> --env <env>`. Until then, the old value is public.
 
 In a headless session, report the leak as a blocker (a subagent to its dispatcher, a root session to the operator), then stop. See [[dev-hinit-nsec]].

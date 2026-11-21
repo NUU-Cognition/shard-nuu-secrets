@@ -10,7 +10,7 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 
 | Step | Who | Commands |
 |---|---|---|
-| Install the CLI and the tools | Operator | `npm install -g @nuucognition/secrets-cli@0.3.0-beta.0`; SOPS, age, Git, gitleaks |
+| Install the CLI and the tools | Operator | `npm install -g @nuucognition/secrets-cli@0.4.0-beta.0`; SOPS, age, Git, gitleaks |
 | The guided setup | Operator | `secrets setup` (on a terminal) |
 | Show the state of the setup | Agent or operator | `secrets setup --print` (changes nothing) |
 | The key of this machine | Operator | `secrets keygen` |
@@ -35,7 +35,7 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 
 ## Before the setup
 
-- **The CLI.** `npm install -g @nuucognition/secrets-cli@0.3.0-beta.0` gives the commands `secrets` and `secret`. It needs Node.js 24 or later. See [[dev-knw-nsec-cli]] § Install.
+- **The CLI.** `npm install -g @nuucognition/secrets-cli@0.4.0-beta.0` gives the command `secrets`. A machine with `0.3.0-beta.0` or older has no `secrets pull`: update it first. It needs Node.js 24 or later. See [[dev-knw-nsec-cli]] § Install.
 - **The tools.** SOPS 3.11 or later, `age` and `age-keygen`, and Git are necessary. gitleaks is optional, but without it the CLI does not scan store commits (Rule 10). `secrets doctor` and step 1 of `secrets setup` check each tool and give its install command.
 - **Git access.** The CLI uses Git for the store repository. The machine needs Git access to that repository: an SSH key that the Git host accepts, or a Git credential helper for HTTPS. Never put a credential in a store URL. The CLI refuses an HTTPS URL with user information and an SSH URL with a password.
 - **The repository of a new store.** The CLI does not make the repository. The operator makes an empty private repository on the Git host first (no README, no first commit).
@@ -114,7 +114,7 @@ The new machine needs its own key. A key never moves between machines.
    secrets recipient add "<id>" <age-public-key> --groups dev
    ```
    Add `prod` or `deploy` only when the operator decides.
-4. On the new machine: `secrets store clone <url>`, or let `secret <cmd>` clone it from `secrets.toml`. `secrets setup` checks again until the admin has added the machine, or stops with `NOT_RECIPIENT` and the hint to run `secrets setup` again later.
+4. On the new machine: `secrets store clone <url>`, or let `secrets pull` clone it from `secrets.toml`. `secrets setup` checks again until the admin has added the machine, or stops with `NOT_RECIPIENT` and the hint to run `secrets setup` again later.
 5. Check: `secrets whoami` (the groups) and `secrets doctor`.
 
 When you help on the new machine, use the key request of [[dev-sk-nsec-request_value]] (step 4).
@@ -131,7 +131,9 @@ secrets target set vercel --project <name-or-id>      # only with the ids from t
 secrets doctor --env dev
 ```
 
-The operator then writes the missing values with `secrets set`, or in the page of `secrets ui`.
+The operator then writes the missing values with `secrets set`, or in the page of `secrets ui`. Then each person runs `secrets pull` before the dev command (`pnpm dev`): it writes the values into the block of `.env.local` ([[dev-sk-nsec-run_app]]). `secrets setup` and `secrets setup --print` end with `secrets pull` for a project. Do not add `secrets pull` to the scripts of `package.json`: CI has no key.
+
+A project that used the `run` command of an older CLI (in a script, a `Makefile`, a README, or `passThroughEnv` of `turbo.json` for the values) needs these changes after the update to `0.4.0-beta.0`: remove the old prefix from the commands, and use `secrets pull` before the dev command. A dev server reads `.env.local` from the disk, so `passThroughEnv` is not necessary for the values. A name that the mapping gives to `local` and that another tool writes into `.env.local` (for example `NEXT_PUBLIC_CONVEX_URL` from `npx convex dev`) stops each pull: the operator removes `local` from that entry, or removes the line. The changes of project files are a task of the project; the agent proposes them, and the operator approves a change of the mapping.
 
 ## Identities
 
@@ -147,7 +149,7 @@ secrets identity rm test                  # the key file stays: the CLI never de
 secrets project identity client           # the identity of the project of the current folder, on this machine
 secrets project identity                  # shows it
 secrets project identity --clear          # removes it: the default applies again
-secret --identity work pnpm dev           # the identity for one command
+secrets pull --identity work             # the identity for one command
 ```
 
 - **Make the identity with the least access the default.** Then a project identity gives more access only in the projects where you set it. In the other direction, each folder where the project identity does not apply gets the default: a new clone, a project with no identity, and a new `secrets.toml` in a subfolder of a project (for example from a `git pull`). For the last case, the CLI prints one warning, but the command does not stop.
@@ -155,7 +157,7 @@ secret --identity work pnpm dev           # the identity for one command
 - **The project identity is a fact of this machine.** It is in `projects.toml`, never in a project file. `secrets project identity <name>` refuses a `secrets.toml` with a symbolic link in its path, a file outside the project of the current folder, and a file that changed during the command. The name must be in `identities.toml`.
 - **The variables.** `SECRETS_IDENTITY=<name>` selects an identity for each command of a shell. `SOPS_AGE_KEY_FILE` selects a key file, not an identity, and wins over the project identity and the default. `secrets project identity` and `secrets identity use` print a note when one of them is set in the shell.
 - **The checks.** `secrets doctor` shows `key selection: …` (the step that selected the key). `secrets whoami` shows the identity.
-- **Limits.** An identity is not a boundary between people: each program of one operating-system user can read each key file of that user. For a boundary, use another operating-system user or another machine. A key file with a passphrase (`age -p`) is not supported: `identity add --key` refuses it. Run `secret <cmd>` from the real folder of the project, not through a folder link of a cloned repository.
+- **Limits.** An identity is not a boundary between people: each program of one operating-system user can read each key file of that user. For a boundary, use another operating-system user or another machine. A key file with a passphrase (`age -p`) is not supported: `identity add --key` refuses it. Run `secrets pull` from the real folder of the project, not through a folder link of a cloned repository: the pull does not write through a link.
 
 When a command stops on an identity problem (`LINKED_MAPPING`, `MAPPING_CHANGED`, `OUTSIDE_PROJECT`, `DUPLICATE_PROJECT`, `UNKNOWN_IDENTITY`), the error lines give the remedy: for example `secrets project identity <name> --mapping <path>` (or `--clear`), `secrets project forget <path>`, `--identity <name>` for one command, or a path with no link. The operator selects the remedy.
 
@@ -211,7 +213,7 @@ secrets vault rm aws/root-login                      # Git history keeps the old
 ```
 
 - **Groups.** `dev` or `prod` (default `prod`). Only the machines of the group open the entry. A machine writes only the entries of its own groups.
-- **Not an environment.** `secret <cmd>` never gives a vault entry to a program. A value that a program reads from its environment goes into the store with `secrets set` and a `ref` entry, not into the vault.
+- **Not an environment.** `secrets pull` never writes a vault entry to `.env.local`. A value that a program reads from its environment goes into the store with `secrets set` and a `ref` entry, not into the vault.
 - **The exact bytes.** `vault set` keeps each byte of stdin, also a last line end (`echo pw | secrets vault set x` stores a line end; use `printf '%s' …`, or a file). The text is 1 byte to 64 KiB of UTF-8 with no NUL character (`BAD_VAULT_TEXT`). `vault set` refuses a terminal on stdin: type a text in `vault edit`. A file with the text is plaintext: delete it after the write (a deleted file can stay on an SSD).
 - **The screen.** `vault show` prints only to a terminal. It shows each control character as `\xNN` and each invisible format character as `\u{XXXX}`, with a line on stderr that counts them: `--copy` gives the exact bytes.
 - **The clipboard.** `vault show --copy` uses `pbcopy` (macOS), or `wl-copy`, `xclip`, or `xsel` (Linux, only with `WAYLAND_DISPLAY` or `DISPLAY` set). After 30 s, a background process clears the clipboard when it still holds the same text (it keeps only a hash). The copy line ends with `cleared in 30 s`, or with `not cleared` when there is no read tool (`pbpaste`, `wl-paste`, `xclip`, `xsel`).

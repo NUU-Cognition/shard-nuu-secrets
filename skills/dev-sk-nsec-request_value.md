@@ -1,5 +1,5 @@
 ---
-description: "Ask the operator for a missing value or key the right way: the variable, the secret name, the environment, and the exact command for the operator's own terminal (secrets set) or the page of secrets ui; ask the operator to do a step that needs a vault text (a password, a login); then continue with secret <cmd>; never a value or a vault text in the chat"
+description: "Ask the operator for a missing value or key the right way: the variable, the secret name, the environment, and the exact command for the operator's own terminal (secrets set) or the page of secrets ui; ask the operator to do a step that needs a vault text (a password, a login); then continue with secrets pull; never a value or a vault text in the chat"
 ---
 
 > [!important] THIS FILE IS AN INSTRUCTION. WHEN REFERENCED IT IS MEANT TO BE TAKEN AS AN ACTION.
@@ -12,7 +12,7 @@ Ask the operator to write a missing value, or to make or add a key, or to do a s
 
 # Input
 
-- The source of the request: the `✘ <n> variable(s) have no value in env <env>` error of `secret`, a `fail` line of `secrets doctor`, a key problem, or a task that needs a text from the vault
+- The source of the request: the `✘ <n> variable(s) have no value in env <env>` error of `secrets pull`, a `fail` line of `secrets doctor`, a key problem, or a task that needs a text from the vault
 - The project: its name and the path of its `secrets.toml`
 - The reason: what the value or the key is for
 
@@ -23,7 +23,7 @@ Ask the operator to write a missing value, or to make or add a key, or to do a s
    - the secret name (for example `clerk/secret-key`, from `secret://clerk/secret-key`);
    - the environment (`dev`, `preview`, `prod`, or `deploy`);
    - the store URL: the `store` field of `[project]` in `secrets.toml`;
-   - the local store name: the `NAME` of the `secrets store list` row whose `URL` is that store URL. The missing-value error also names the store (`… of store <store>`). The `secret:` line names a revision, not a store.
+   - the local store name: the `NAME` of the `secrets store list` row whose `URL` is that store URL. The missing-value error also names the store (`… of store <store>`). The `pull` line names a revision, not a store.
 2. **Remove what is not necessary.**
    - `preview` reads the dev value when it has no own value. Request a preview value only when it must be different from dev.
    - Request `prod` or `deploy` values only when the task needs them.
@@ -57,7 +57,7 @@ Ask the operator to write a missing value, or to make or add a key, or to do a s
    - A successful `secrets set` prints `set  <name>  env <env>  store <store> @ <revision>`, or `unchanged  …` when the store already has that value. Both exit 0. Neither shows a value.
    - Before the commit, `secrets set` runs the secret scan. It can stop with `✘ The secret scan (gitleaks) …`, or print the warning `secrets: gitleaks is not on PATH, …`. Read the text that the operator sends with [[dev-sk-nsec-diagnose]] (step 10).
    - When plain `secrets doctor` shows `SECRETS_GITLEAKS=0: the CLI does not scan store commits` or `gitleaks is not on PATH: the CLI does not scan store commits`, add that line to the request. Ask the operator to check the command environment in their terminal. If the reported condition also applies there, the write has no secret scan ([[dev-knw-nsec-rules]] § Rule 10).
-4. **Write the request for a key.** Use this shape when `secret` stops with `✘ No usable age key: …`, or when `secrets doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`. Do not use it for `this machine as a recipient: unknown (…)`: that line is not proof of a missing key (see [[dev-sk-nsec-diagnose]]). First collect the public facts yourself:
+4. **Write the request for a key.** Use this shape when `secrets pull` stops with `✘ No usable age key: …`, or when `secrets doctor` says `no age key file at <path>` or `this machine is not a recipient of the store`. Do not use it for `this machine as a recipient: unknown (…)`: that line is not proof of a missing key (see [[dev-sk-nsec-diagnose]]). First collect the public facts yourself:
    - When doctor reports a missing key file and no other key source, use step 1a of the request.
    - When the file exists but cannot be used, use step 1c. Do not ask the operator to replace it with `secrets keygen`.
    - A public-key line from doctor can use another SOPS key source. It does not prove that the CLI key file exists.
@@ -120,13 +120,13 @@ Ask the operator to write a missing value, or to make or add a key, or to do a s
    - do not repeat it and do not use it;
    - tell the operator that the value is now in the session transcript;
    - follow [[dev-knw-nsec-rules]] § If a value leaks (the operator replaces the value at its provider).
-8. **Check the result.** After the operator acts (with `secrets set` or in `secrets ui`), run plain `secrets doctor` with the task's mapping, store, and environment options. Keep the lines about local changes, unpushed commits, and links. Then run `secrets doctor --online` with the same options, or run `secret <cmd>` again. The cached clone can be older than a remote change. A successful write on this machine already updates its clone. The `fail` lines for these names must be gone.
-9. **Continue the task.** Run the program with `secret <cmd>` ([[dev-sk-nsec-run_app]]). Do not read the values from the UI or from `secrets export` to check them.
+8. **Check the result.** After the operator acts (with `secrets set` or in `secrets ui`), run plain `secrets doctor` with the task's mapping, store, and environment options. Keep the lines about local changes, unpushed commits, and links. Then run `secrets doctor --online` with the same options, or run `secrets pull --check` again. The cached clone can be older than a remote change. A successful write on this machine already updates its clone. The `fail` lines for these names must be gone.
+9. **Continue the task.** Run `secrets pull`, then the normal command of the program ([[dev-sk-nsec-run_app]]). Do not read the values from the UI, from `secrets export`, or from `.env.local` to check them.
 
 # Output
 
 - One request to the operator with each missing value or key, the reason, and the exact commands
 - No value in the request, in your context, or in a file
-- After the operator acts: a `secrets doctor` result or a `secret <cmd>` run without the missing values
+- After the operator acts: a `secrets doctor` result or a `secrets pull` without the missing values
 - For a vault text: one request for the step of the operator, with the entry name only
 - Never a `secrets ui` run, a page read, an open of its login link, a `vault show|edit|set` run, or a clipboard read by you
