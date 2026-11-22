@@ -137,7 +137,7 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 |---|---|
 | `secrets pull` | Write the `local` values of the project (`dev` or `preview`) into the block of `.env.local`. Then run the normal command of the program. Without `--force`. See Rule 15 and [[dev-sk-nsec-run_app]]. |
 | `secrets pull --check` | Show whether the block is current (`current` or `stale`, with names only). It writes nothing. Run it before each pull. |
-| `secrets pull --all`, `secrets pull --check --all` | The same for each project of the project index in the current Git repository. A refusal of one project stops the pull before the first write. |
+| `secrets pull --all`, `secrets pull --check --all` | The same for each project of the project index in the current Git repository. A refusal that the checks find in one project stops the pull before the first write. A refusal during the writes can leave the projects before it written. |
 | `secrets doctor` | Check the tools, the key, the stores, the mapping, and the project. Without `--online`, it changes nothing. See [[dev-sk-nsec-diagnose]]. |
 | `secrets doctor --online` | The same checks after a refresh: it fetches each checked clone and resets it to the remote. The reset discards the local changes of an interrupted command in the clone (a cache that the CLI owns). It never clones a missing store. Run it only after a plain `secrets doctor` with the same options. |
 | `secrets keygen --public` | Print the full public key of the key file of this machine. It makes no key and never prints the private key. Use it only with no `--file`. |
