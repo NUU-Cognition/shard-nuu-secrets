@@ -1,5 +1,5 @@
 ---
-description: "The setup of NUU Secrets for an operator: the install, Git access, the guided setup secrets setup and setup --print, a new store for a new team, a new machine for a store, a project, identities (the least access as the default), the project index, collections, expiry dates, the change log and the ref fix, the vault (operator only), the local web page secrets ui (operator only), the accepted store URL forms, and which steps an agent can do"
+description: "The setup of NUU Secrets for an operator: the install, Git access, the guided setup secrets setup and setup --print, a new store for a new team, a new machine for a store, a project, identities (the least access as the default), the project index, moves to shared, tags, environment sets, expiry dates, the change log and the ref fix, the vault (operator only), the local web page secrets ui (operator only), the accepted store URL forms, and which steps an agent can do"
 ---
 
 # Knowledge: The Setup for an Operator
@@ -25,8 +25,9 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 | Show the identities and the project index | Agent or operator | `secrets identity list`, `secrets project list`, `secrets project identity` |
 | Add the projects of a folder to the project index | Agent or operator | `secrets project add <folder>` (first with `--dry-run`), or "Add projects from a folder" in the page of `secrets ui` (operator) |
 | Remove a project from the project index | Operator | `secrets project forget <name\|path>` |
-| Show the change log, the refs, the collections, the expiry dates, and the vault entry names | Agent or operator | `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets collection list`, `secrets expiry list`, `secrets vault list` |
-| Rename a secret, change the collections, set the expiry dates | Operator (an agent only with the approval of the operator) | `secrets mv`, `secrets collection create\|edit\|rename\|rm`, `secrets expiry set\|clear`, `secrets set … --expires <date>` |
+| Show the names by project, the environment sets, the tags, the change log, the refs, the expiry dates, and the vault entry names | Agent or operator | `secrets list`, `secrets env <name>`, `secrets tag list`, `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets expiry list`, `secrets vault list` |
+| Rename a secret, move a value to `shared`, change the tags or the environment sets, set the expiry dates | Operator (an agent only with the approval of the operator) | `secrets mv`, `secrets tag add\|rm\|edit\|rename`, `secrets vault tag add\|rm`, `secrets env <name> <envs>`, `secrets expiry set\|clear`, `secrets set … --expires <date>` |
+| Migrate a store of the previous version | Operator only (never an agent) | A store of the previous version needs the migration; the guide comes with Task 035. |
 | Fix the moved refs of the projects | Operator (an agent only with the approval of the operator) | `secrets refs fix` |
 | Read and write the vault | Operator only (never an agent) | `secrets vault show\|edit\|set`, or the Vault view of `secrets ui` |
 | Rename, move, or remove a vault entry | Operator (an agent only with the approval of the operator) | `secrets vault mv\|rm` |
@@ -126,7 +127,8 @@ You can do these steps (Rule 6). Use [[dev-sk-nsec-setup_project]]. In short:
 ```sh
 secrets init-project --name <project> --store <url>   # also adds .env* and secrets.local.toml to .gitignore
 secrets vars --unmapped                               # the names that the code reads and no mapping has
-secrets bind <VAR> <name> --to local                  # one for each variable
+secrets bind <VAR> --to local                         # one for each variable: the implicit ref <project>/<VAR>
+secrets bind <VAR> shared/<NAME> --to local           # a link to a value in shared
 secrets target set vercel --project <name-or-id>      # only with the ids from the operator
 secrets doctor --env dev
 ```
@@ -178,24 +180,33 @@ secrets project forget ./apps/web         # a path: a secrets.toml or its folder
 - `project add` takes a folder or one `secrets.toml`. It follows no symbolic link and does not enter hidden folders, `node_modules`, `dist`, `build`, and other build folders. It stops at 12 folders deep, 50000 folders, 15 seconds, or 1000 files, and adds the files that it found. A new entry has no identity, and a known entry keeps its identity. It prints `added`, `updated`, `known`, or `skipped <reason>` for each file ([[dev-knw-nsec-cli]] § `secrets project add`). An agent can run it.
 - `forget` removes all entries of one file. The path of a link removes only the entry of the link, never the entry of its target. When a word is a project name and also a relative path of another entry, `forget` refuses and removes nothing. An agent does not run `forget`: an entry can hold the project identity.
 
-## Collections, expiry dates, and the change log
+## Tags, environment sets, expiry dates, and the change log
 
-These are operator decisions. An agent shows the state and gives the commands ([[dev-knw-nsec-rules]] § Rule 13). The model is in [[dev-knw-nsec-model]] § Collections, § Expiry dates, and § The change log and moved refs.
+These are operator decisions. An agent shows the state and gives the commands ([[dev-knw-nsec-rules]] § Rule 13). The model is in [[dev-knw-nsec-model]] § Store projects and `shared`, § Declared environments, § Tags, § Expiry dates, and § The change log and moved refs.
 
 ```sh
-secrets collection list                                        # the collections, their names, and the next expiry date
-secrets collection create openai --description "OpenAI API keys" --url https://platform.openai.com/api-keys --warn-days 30
-secrets collection rename openai oai                           # renames each openai/… secret and the record
-secrets mv openai/api-key anthropic/api-key                    # renames one secret in each environment
-secrets set openai/api-key --env prod --expires 2027-01-31     # a new value and its expiry date in one commit
-secrets expiry set openai/api-key --env prod --date 2027-01-31 # the date only (--env is required)
+secrets list --project shared                                  # the shared secrets and the projects that link to them
+secrets mv nuu-track/OPENAI_API_KEY shared/OPENAI_API_KEY      # one copy for many projects: the move to shared
+secrets bind OPENAI_API_KEY shared/OPENAI_API_KEY --to local   # then each project links to it
+secrets env nuu-track/SENTRY_AUTH_TOKEN                        # show the declared environments
+secrets env nuu-track/SENTRY_AUTH_TOKEN dev,prod               # change the set (no value may stay outside it)
+secrets set nuu-track/CLERK_SECRET_KEY --env preview           # preview has its own value: it does not read dev
+secrets tag list                                               # the tag tree with the counts and the records
+secrets tag add nuu-track/CONVEX_DEPLOY_KEY_PROD convex/deploy-keys
+secrets tag edit convex --description "Convex deploy keys" --url https://dashboard.convex.dev --warn-days 30
+secrets tag rename convex convex-cloud                         # also each child tag and each record
+secrets set shared/OPENAI_API_KEY --env prod --expires 2027-01-31     # a new value and its expiry date in one commit
+secrets expiry set shared/OPENAI_API_KEY --env prod --date 2027-01-31 # the date only (--env is required)
 secrets expiry list --due                                      # the secrets that are due or expired
-secrets log                                                    # the change log, newest first
+secrets log --tag convex                                       # the change log of a tag, newest first
 ```
 
-- **A rename breaks refs.** After `mv` or `collection rename`, the projects that use the old names have moved refs. On each machine, after `secrets store sync`, the operator (or an agent with the approval of the operator) runs `secrets refs --all`, then `secrets refs fix --all`, and commits the changed `secrets.toml` files.
-- **Rotation.** An expiry warning means: replace the key at its provider, then `secrets set <name> --env <env> --expires <new date>`. A new value does not change the date.
-- **The page.** The page of `secrets ui` shows the collections in the side bar, the expiry badges, Activity (the change log), and Health (moved refs, removed refs, due and expired secrets), with "Fix the refs" and the expiry form.
+- **A move breaks refs.** After `mv` (also a move to `shared`), the projects that use the old name have moved refs. On each machine, after `secrets store sync`, the operator (or an agent with the approval of the operator) runs `secrets refs --all`, then `secrets refs fix --all` (or binds the link), and commits the changed `secrets.toml` files.
+- **A ref can point only to `shared` or to the own project.** A value of one project that a second project needs moves to `shared` first. `bind` refuses a name of another project (`BAD_LINK`).
+- **Declared environments.** A secret gets a value only in an environment that it declares (`ENV_NOT_DECLARED`). `secrets env <name> <envs>` refuses a set that leaves a value outside it (`ENV_HAS_VALUE`): remove the value first. A value in an undeclared environment is not delivered, and `doctor` warns.
+- **Rotation.** An expiry warning means: replace the key at its provider, then `secrets set <name> --env <env> --expires <new date>`. A new value does not change the date. The warning window comes from the entry, else from the nearest tag record with `warn-days`, else 14 days.
+- **A store of the previous version.** It has lowercase path names and can have the records of its groups by provider. A store of the previous version needs the migration; the guide comes with Task 035. No agent migrates a store or the secrets of a local repository.
+- **The page.** The page of `secrets ui` shows the store projects in the side bar, the expiry badges, Activity (the change log), and Health (moved refs, removed refs, due and expired secrets), with "Fix the refs" and the expiry form. It does not show tags yet: use `secrets tag`.
 
 ## The vault
 
@@ -222,7 +233,7 @@ secrets vault rm aws/root-login                      # Git history keeps the old
 
 ## The UI: `secrets ui`
 
-`secrets ui` starts a local web page for the operator. The page shows one store at a time: its projects, its collections, the names of each environment, and the change log. A value stays hidden until the operator reveals it. The page can still change: this section gives only the facts that an agent needs to guide the operator. Agents never run `secrets ui` and never read values from it ([[dev-knw-nsec-rules]] § Rule 11). You can tell the operator about it, for example to set the missing values.
+`secrets ui` starts a local web page for the operator. The page shows one store at a time: its projects, its store projects, the names of each environment, and the change log. A value stays hidden until the operator reveals it. The page can still change: this section gives only the facts that an agent needs to guide the operator. Agents never run `secrets ui` and never read values from it ([[dev-knw-nsec-rules]] § Rule 11). You can tell the operator about it, for example to set the missing values.
 
 ```sh
 secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
@@ -232,7 +243,7 @@ secrets ui [--identity <name>] [--no-open] [--idle <minutes>]
 - **The login link.** The token works one time, in the first 60 seconds. The CLI opens the browser with a launch file (mode 600), so the token is in no process argument. With `--no-open`, the operator opens the URL. For a new link, the operator stops `secrets ui` and runs it again. The link is a credential: never send it in a chat or a message.
 - **The identity.** The login link unlocks the page at once with the identity of `--identity <name>`, else with the one identity of this machine that has a usable key file. With two or more such identities, the page asks for one. The page then reads and writes with the key file of that identity only: no `SOPS_AGE_KEY_FILE`, no `SECRETS_IDENTITY`, and no project identity applies. With no identity on this machine, the page shows its first setup: it makes the first identity (the default) with a new key or an existing key file.
 - **The store.** After the unlock, the page shows "Choose a store" when the identity opens two or more stores. With one store, it opens that store.
-- **The side bar** of the store: the store switch at the top (the other stores, Sync, and the recipients), Projects (the projects of that store), Collections, and Activity and Health at the bottom. ⌘K and ⌘P open the palette (the projects, the collections, and "Switch the store").
+- **The side bar** of the store: the store switch at the top (the other stores, Sync, and the recipients), Projects (the projects of that store), the store projects (the names grouped by their first segment), and Activity and Health at the bottom. The page has no tag view yet. ⌘K and ⌘P open the palette.
 - **Add projects.** When the store has no projects, the side bar shows "Add projects from a folder" (also in the palette). It does the same as `secrets project add <folder>` (an agent can run that command for the operator). It writes only `projects.toml`.
 - **The lock.** The page locks after 15 minutes with no request (`--idle <minutes>`, 1 to 1440), and when the operator clicks Lock. A reload, Lock, and the idle lock ask for the click "Unlock". The lock and Quit delete the Undo records of the server.
 - **The hidden values.** A list never holds a value. The page shows 8 dots for a hidden value. A reveal gives one value and hides it again after 30 seconds, on blur, and on a change of the selection. Copy works without a reveal, and the page clears the clipboard after 30 seconds when it can. The page compares values ("same as dev") with no reveal. Before each reveal or copy, the server writes one line in `<secrets home>/ui-reveal.log`: the time, the identity, the store, the environment, the name, and show or copy, never the value.

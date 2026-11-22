@@ -1,5 +1,5 @@
 ---
-description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; secrets pull and the block of .env.local (never read or change it, change a value in the store, report a managed name outside the block); no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup, the identity changes, and the changes of names, collections, expiry dates, refs, and vault entries); how to ask for a value; the secret scan of store commits; agents never use secrets ui; use the identity that the CLI selects and stop on an identity problem; moved and removed refs and expiry warnings; agents never read or write a vault text; what to do after a leak"
+description: "The complete agent rules for NUU Secrets: no value in output, files, or arguments; secrets pull and the block of .env.local (never read or change it, change a value in the store, report a managed name outside the block); no access to the key or the store files; mapping changes only through the commands; the operator-only commands (also secrets setup, the identity changes, and the changes of names, moves to shared, tags, environment sets, expiry dates, refs, vault entries, and the store migration); how to ask for a value; the secret scan of store commits; agents never use secrets ui; use the identity that the CLI selects and stop on an identity problem; moved and removed refs, tags, environment sets, moves to shared, and expiry warnings; agents never read or write a vault text; what to do after a leak"
 ---
 
 # Knowledge: Agent Rules
@@ -13,10 +13,16 @@ This shard uses one word for one thing.
 | Word | Meaning |
 |---|---|
 | value | The plaintext of a secret of an environment, for example an API key, a token, or a password. |
-| secret name | The stable name of a value in the store, for example `clerk/secret-key`. A secret name is not secret. |
-| collection | The first segment of a secret name: `openai` in `openai/api-key`. A collection can have a record in `collections.toml` (a description, a source URL, a warning window). A name with one segment is in no collection. |
+| secret name | The stable name of a value in the store: `<project>/<VARIABLE>`, for example `nuu-track/CLERK_SECRET_KEY` or `shared/SENTRY_DSN`. A secret name is not secret. |
+| store project | The first segment of a secret name: the `[project] name` of one `secrets.toml`, or `shared`. |
+| shared | The store project that holds the only copy of a value that two or more projects use. The projects link to it. |
+| implicit ref | An entry of `secrets.toml` with no `ref` and no `value`. It names `<project>/<VARIABLE>` of its own project. |
+| link | An entry with `ref = "secret://shared/<NAME>"`. A ref can point only to `shared` or to the own project. |
+| declared environments | The environments of one secret that need a value. The default set is `dev`, `preview`, `prod`; a platform credential has `deploy`. A value in an environment that the secret does not declare is not delivered. |
+| tag | A hierarchical label of secrets and vault entries, for example `#convex/deploy-keys`. A tag includes its children. A tag can have a record in `tags.toml` (a description, a source URL, a warning window). |
+| store migration | The change of a store of the previous version to the names by project and the tags. The guide comes with Task 035. |
 | expiry date | The first day on which the key of one secret name in one environment does not work, in `metadata.toml`. The operator sets it. The CLI warns when the date is near (`due`) or past (`expired`). |
-| change log | `changes.jsonl` in the store: one line for each change of a write (a name added, changed, removed, or moved; a collection or expiry change; a vault change), with the time and the recipient id of the writer. It never holds a value or a vault text. |
+| change log | `changes.jsonl` in the store: one line for each change of a write (a name added, changed, removed, or moved; a tag, tag record, environment set, or expiry change; a vault change), with the time and the recipient id of the writer. It never holds a value or a vault text. |
 | vault | The encrypted free-text entries of a store, in `vault/<group>/<name>.enc.yaml`. The vault is not part of the environments. |
 | vault entry | One entry of the vault: an entry name (for example `aws/root-login`), a group (`dev` or `prod`), and an encrypted text. An entry name is not secret. |
 | vault text | The plaintext of a vault entry, for example a password, a login, recovery codes, or a private key. Agents never read or write it (Rule 14). |
@@ -31,8 +37,8 @@ This shard uses one word for one thing.
 | key file | An age private key file of this machine. For each command, the CLI selects one key file: the key file of an identity, `$SOPS_AGE_KEY_FILE`, or `~/.config/sops/age/keys.txt` ([[dev-knw-nsec-model]] § Identities and the key selection). |
 | identity | A name for one key file of this machine, in `identities.toml` of the secrets home. The file holds names and paths, never a key. One machine can have several identities. An identity is not a security boundary between people. |
 | project index | `projects.toml` in the secrets home: the projects of this machine, with the path of each `secrets.toml`, the project name, the store name, and the project identity. It holds no value. |
-| the UI | `secrets ui`: the local web page for the operator. It shows the stores, the projects, the collections, the change log, the vault, and the values and vault texts (hidden until a reveal). Agents never use it (Rule 11). |
-| store write | A command that changes the store with one Git commit and one push: `secrets store init`, `set`, `unset`, `edit`, `mv`, `collection create\|edit\|rename\|rm`, `expiry set\|clear`, `vault edit\|set\|mv\|rm`, `recipient add\|rm`, and `store fix-config`, and each write of the page of `secrets ui`. Each store write is an operator command (Rule 5). |
+| the UI | `secrets ui`: the local web page for the operator. It shows the stores, the projects, the tags, the change log, the vault, and the values and vault texts (hidden until a reveal). Agents never use it (Rule 11). |
+| store write | A command that changes the store with one Git commit and one push: `secrets store init`, `set`, `unset`, `edit`, `mv`, `env <name> <envs>`, `tag add\|rm\|edit\|rename`, `vault tag add\|rm`, `expiry set\|clear`, `vault edit\|set\|mv\|rm`, `recipient add\|rm`, and `store fix-config`, and each write of the page of `secrets ui`. Each store write is an operator command (Rule 5). |
 | secret scan | The gitleaks scan that the CLI runs on the bytes of each store commit before the commit (Rule 10). |
 | operator | The person who owns this machine and its store access. Only the operator enters values and manages keys. |
 
@@ -89,14 +95,14 @@ Other processes can read the arguments of a process. A program must read a value
 - Do not read or print the variable `SOPS_AGE_KEY`: it can hold a private key. Do not run the command of `SOPS_AGE_KEY_CMD`.
 - Do not decrypt a store file. Do not run `sops` on a store file. An error of `secrets pull` can say "Run sops yourself to see it". That sentence is for the operator, not for you.
 - When a read stops with ``✘ The store file <file> of store <store> has SOPS metadata that the CLI does not decrypt. SOPS did not run, and nothing was read.`` (`UNSAFE_STORE`), or with the same message for a vault file (``✘ The vault file <path> of store <store> has SOPS metadata …``, `UNSAFE_VAULT`), stop. The file has a key of another system (for example `hc_vault`, `kms`, or `pgp`), an unknown metadata key, or no SOPS metadata, and SOPS could send a credential of this machine to that system. Do not open, edit, or decrypt the file, and do not set a variable of another key system. Give the operator the exact message ([[dev-sk-nsec-diagnose]], step 4).
-- Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `collections.toml`, `metadata.toml`, `changes.jsonl`, `stores.toml`, `identities.toml`, or `projects.toml` by hand. Do not open, decrypt, copy, or change a file under `vault/` of a store clone (Rule 14). Do not add an `identity` key to `secrets.local.toml`: a project file never selects an identity, and the CLI ignores the key with a warning (Rule 12).
+- Do not edit `*.enc.yaml`, `.sops.yaml`, `.gitleaks.toml`, `recipients.toml`, `tags.toml`, `metadata.toml`, `changes.jsonl`, any other file of a store clone, `stores.toml`, `identities.toml`, or `projects.toml` by hand. Do not open, decrypt, copy, or change a file under `vault/` of a store clone (Rule 14). Do not add an `identity` key to `secrets.local.toml`: a project file never selects an identity, and the CLI ignores the key with a warning (Rule 12).
 - Change `secrets.toml`, `secrets.local.toml`, and the NUU Secrets lines of `.gitignore` with the commands of Rule 6 (`init-project`, `bind`, `unbind`, `target set|rm`, `project gitignore`, `project set`), or with `refs fix` after the approval of the operator (Rule 13), not by hand. These commands check the result and refuse a bad change. When a command cannot edit an unusual form of the file (`MAPPING_EDIT`), report it to the operator.
 - Do not run Git commands in a store clone, and do not delete a store clone. Do not delete a `.removing-*` folder in the stores folder: report it to the operator. To refresh a store clone, first run plain `secrets doctor` for that store (Rule 6). Then run `secrets store sync <name>`, or `secrets doctor --online` with the same options.
 - Do not move, link, or replace folders in the secrets home. Managed-clone checks refuse linked folders below the real secrets home. Store-file checks refuse non-regular files. Both refuse a file or a folder that they cannot check (`… cannot check …`, `… cannot be checked (<code>)`). Not every metadata command runs every check. Report each refusal to the operator. Do not change modes to pass a check.
 
 ## Rule 5 — Operator-only commands
 
-The operator enters values, manages keys, and owns the names, the collections, the expiry dates, and the vault. Do not run these commands. The one exception: the operator asks for that exact command now, or approves it (the approval of the operator). (A test of the CLI in a sandbox has its own rule: see [Tests of the CLI itself](#tests-of-the-cli-itself).)
+The operator enters values, manages keys, and owns the names, the moves to `shared`, the tags, the environment sets, the expiry dates, the vault, and the store migration. Do not run these commands. The one exception: the operator asks for that exact command now, or approves it (the approval of the operator). (A test of the CLI in a sandbox has its own rule: see [Tests of the CLI itself](#tests-of-the-cli-itself).)
 
 | Command | What it does |
 |---|---|
@@ -114,8 +120,10 @@ The operator enters values, manages keys, and owns the names, the collections, t
 | `secrets identity add`, `secrets identity use`, `secrets identity rm` | Add an identity (also a new key), change the default identity, or remove an identity. They change the key file that a command uses. See Rule 12. |
 | `secrets project identity <name>`, `secrets project identity --clear` | Set or remove the identity of a project on this machine (in `projects.toml`). `secrets project identity` with no name and no `--clear` only shows it (Rule 6). See Rule 12. |
 | `secrets project forget <name\|path>` | Removes the entries of a project from the project index. An entry can hold the project identity: without it, the default identity applies, and the default can have more access. See Rule 12. |
-| `secrets mv <from> <to>` | Renames a secret in each store file that holds it. Then the refs of the projects that use the old name are `moved`. See Rule 13. |
-| `secrets collection create`, `edit`, `rename`, `rm` | Change a collection record. `rename` also renames each secret of the collection, as `mv` does. See Rule 13. |
+| `secrets mv <from> <to>` | Renames a secret in each store file that holds it, also a move to `shared` (`secrets mv <project>/<VARIABLE> shared/<VARIABLE>`). Then the refs of the projects that use the old name are `moved`. See Rule 13. |
+| `secrets env <name> <envs>` | Changes the declared environments of one secret. `secrets env <name>` with no set only shows them (Rule 6). See Rule 13. |
+| `secrets tag add`, `rm`, `edit`, `rename`; `secrets vault tag add`, `rm` | Change the tags of a secret or a vault entry, or a tag record. `tag rename` changes each secret, vault entry, and record of the tag and its children. See Rule 13. |
+| The store migration | Changes a store of the previous version. The guide comes with Task 035. See Rule 13. |
 | `secrets expiry set`, `secrets expiry clear` | Set or remove the expiry date of one secret in one environment. See Rule 13. |
 | `secrets refs fix` (without `--dry-run`) | Rewrites each moved ref in `secrets.toml` and `secrets.local.toml`. `secrets refs fix --dry-run` is not on this list (see Rule 6). See Rule 13. |
 | `secrets vault mv`, `secrets vault rm` | Rename a vault entry, move it to the other group, or remove it. See Rule 14. |
@@ -151,8 +159,10 @@ When interrupted local work can matter, run plain `secrets doctor` before a refr
 | `secrets log` | Show the change log of the store: names, environments, vault groups, dates, and the recipient id of each writer. No value, no vault text, and no key needed. |
 | `secrets refs` | Show the state of each ref of the project (or with `--all`, of each project of the project index): `ok`, moved, removed, or not in the store. No key needed. See Rule 13. |
 | `secrets refs fix --dry-run` | Show the plan of the ref fix. It changes nothing. Without `--dry-run`, `refs fix` needs the approval of the operator (Rule 5). |
-| `secrets collection list` | List the collections: the record, the number of names in each environment, the warning window, and the next expiry date. No key needed. |
-| `secrets expiry list` | List the expiry dates with their state (`ok`, `due`, `expired`). No key needed. |
+| `secrets list` | List the secret names by project, with the environments that have a value, the tags, and the projects of this machine that use each one. `--project <name>`, `--tag <tag>`. No key needed. |
+| `secrets env <name>` (no set) | Show the declared environments of one secret, the environments that have a value, and the missing values. No key needed. |
+| `secrets tag list` | Show the tag tree: each tag with the number of secrets and vault entries, the warning window, and the record. No key needed. |
+| `secrets expiry list` | List the expiry dates with their state (`ok`, `due`, `expired`). `--tag <tag>`. No key needed. |
 | `secrets vault list` | List the vault entries: the name, the group, the last change, and the access of this machine. It decrypts nothing and shows no text. See Rule 14. |
 | `secrets store clone` | Clone the store of a project (a network access). You seldom need it: `secrets pull` without `--offline` clones the store when necessary. |
 | `secrets setup --print` | Show the state of each setup step and the commands that remain. It changes nothing. See [[dev-knw-nsec-setup]]. |
@@ -193,7 +203,7 @@ A platform target (`vercel`, `convex`, `railway`) in `secrets.toml` tells `secre
 - **`secrets plan` is an agent command.** It prints names and statuses, never a value, and it calls no platform. But it decrypts the store values and the platform credentials in memory: it needs a key in group `deploy`. Before a plan, follow the refresh rule of Rule 6: when interrupted local work can matter, run plain `secrets doctor` with the same options first, or use `secrets plan --offline`.
 - **`no access` is expected** for a key that is not in group `deploy`. It is not a permission to add access. Do not ask for group `deploy` unless the operator or the task says so.
 - **A plan is not proof of a push.** `plan` cannot see the state of the platform: the Vercel variables of other environments, the Railway reference variables, or an identifier collision. A successful plan does not prove that the push passes.
-- **Credentials.** Never write a platform credential. Give the operator the exact command: `secrets set vercel/token --env deploy`, `secrets set vercel/team-id --env deploy`, `secrets set convex/<deployment>/<env> --env deploy`, or `secrets set railway/token --env deploy`.
+- **Credentials.** Never write a platform credential. Give the operator the exact command: `secrets set shared/VERCEL_TOKEN --env deploy`, `secrets set shared/VERCEL_TEAM_ID --env deploy`, `secrets set <project>/CONVEX_DEPLOY_KEY_<ENV> --env deploy` (`DEV`, `PREVIEW`, or `PROD`), or `secrets set shared/RAILWAY_TOKEN --env deploy`.
 - **After an `uncertain` write, never run the push again.** Show the operator the confirmed writes and the uncertain writes from stderr. The CLI says: `Check each uncertain variable on the platform before you run the push again.`
 - **A short store value inside a platform id.** A push stops when an id from the platform holds a store value or a credential, of any length. The operator decides. A value that is not secret can become a literal in `secrets.toml`. Never move a secret value into `secrets.toml`.
 - **No deployment.** Do not deploy after a push, and do not run a platform CLI with a value. Give the operator the `next` lines of the push output.
@@ -227,7 +237,7 @@ In a headless session, a scan refusal and an inherited `SECRETS_GITLEAKS=0` are 
 
 ## Rule 11 — The UI (`secrets ui`) is for the operator
 
-`secrets ui` starts a local web page on `127.0.0.1`. The page shows the stores, the projects, the collections, the change log, the vault, and the values of this machine. A reveal or a copy in the page gives a value or a vault text. Thus the UI is for a person at a terminal, never for an agent.
+`secrets ui` starts a local web page on `127.0.0.1`. The page shows the stores, the projects, the store projects, the change log, the vault, and the values of this machine. A reveal or a copy in the page gives a value or a vault text. Thus the UI is for a person at a terminal, never for an agent.
 
 - **Never run `secrets ui`.** This applies to each option (`--no-open`, `--identity`, `--idle`), and also when the operator asks. With no terminal, the CLI refuses: `✘ secrets ui needs a terminal on stdin and stdout: the UI is for a person at a terminal. Nothing was started.` (`NO_TERMINAL`). Do not give it a terminal (a pseudo-terminal, `script`, `expect`, `tmux`, or a terminal tool of your harness).
 - **Never read values from the UI.** This also applies to a vault text, and to the actions of the page (for example "Fix the refs" and the expiry form). Do not open the URL or the login link of the UI. Do not open the page in a browser or in a browser tool. Do not send a request to its server or its API (`curl`, `fetch`, or another HTTP client to `127.0.0.1:<port>`). Do not read its launch file: it holds the login token.
@@ -260,20 +270,24 @@ The CLI selects one key file for each command. The selection order is in [[dev-k
 
 In a headless session, an identity problem is a blocker. See [[dev-hinit-nsec]].
 
-## Rule 13 — Moved refs, collections, and expiry dates
+## Rule 13 — Names, moves to shared, tags, environment sets, refs, and expiry dates
 
-The change log records each change of a store write. The CLI uses it to explain a missing ref. The operator owns the secret names, the collections, and the expiry dates.
+The change log records each change of a store write. The CLI uses it to explain a missing ref. The operator owns the secret names, the moves to `shared`, the tags, the environment sets, the expiry dates, and the store migration.
 
-- **You can read them.** `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets collection list`, `secrets expiry list`, and `secrets vault list` show names, environments, groups, dates, and recipient ids, never a value (Rule 6).
-- **A change needs the approval of the operator.** `secrets mv`, `secrets collection create|edit|rename|rm`, `secrets expiry set|clear`, `secrets refs fix` (without `--dry-run`), and `secrets vault mv|rm` (Rule 5). Each of them except `refs fix` is a store write: check for an inherited `SECRETS_GITLEAKS=0` first (Rule 10).
+- **You can read them.** `secrets list`, `secrets env <name>` (no set), `secrets tag list`, `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets expiry list`, and `secrets vault list` show names, tags, environments, groups, dates, and recipient ids, never a value (Rule 6).
+- **These are operator writes.** A move to `shared` and each other rename (`secrets mv`), a tag change (`secrets tag add|rm|edit|rename`, `secrets vault tag add|rm`), an environment set (`secrets env <name> <envs>`), an expiry date (`secrets expiry set|clear`), a ref fix (`secrets refs fix` without `--dry-run`), a vault move or remove (`secrets vault mv|rm`), and the store migration. Each one needs the approval of the operator (Rule 5). Each of them except `refs fix` is a store write: check for an inherited `SECRETS_GITLEAKS=0` first (Rule 10).
+- **No agent migrates a store or a local repository.** Do not move the secrets of a project to `shared`, do not change the names, the tags, or the environment sets of a store, and do not migrate a store of the previous version. Do not change the `secrets.toml` of a local repository to the new names. Report what you find, with the exact command, and the operator decides. A store of the previous version needs the migration; the guide comes with Task 035.
+- **A value that another project already has.** When a project needs a value that another project has (`secrets list` shows the name in that project), do not write a second copy and do not link to the other project: a ref can point only to `shared` or to the own project (`BAD_LINK`). Tell the operator: the operator decides and runs the move (`secrets mv <project>/<VARIABLE> shared/<VARIABLE>`). Then bind the link ([[dev-sk-nsec-setup_project]], step 6).
+- **A value in an undeclared environment.** `pull`, `export`, and `plan` write a warning (`… does not declare env <env> … The value is not used.`), and `doctor` warns. The value is not delivered. Report the warning with its two commands (`secrets env …` or `secrets unset …`) to the operator. Do not run them.
+- **A missing value in a declared environment.** For example a secret of preview with no preview value: `preview` does not read `dev`. Ask the operator for the value (Rule 7). Do not use the dev value, and do not change the environment set to stop the error.
 - **A moved ref.** The error of a missing value, a `doctor` line, a `plan` line, or `secrets refs` says ``moved to secret://<new name> on <date> by <recipient id>; run `secrets refs fix` ``. The CLI never uses the value of the new name: the project file must change first. Run `secrets refs fix --dry-run` with the same `--mapping`, `--project`, or `--all`. Give the operator the plan, and ask for the approval of the fix. Change the files only after the approval ([[dev-sk-nsec-diagnose]], step 7). Do not edit the ref by hand, do not `bind` the new name yourself, and do not run the program from another folder or with another `--mapping` to pass the check.
 - **A removed ref.** The hint says `removed on <date> by <recipient id>` (or `moved to …, then removed on …`). The store has no value for that name now. Ask the operator what to do: bind another name, remove the entry, or write a new value. Do not decide it yourself: do not `unbind` the entry, do not bind another name, and do not mark the entry `optional`.
 - **A ref that is not in the store** with no change-log entry is a missing value (Rule 7).
 - **A push.** `plan` and `push` stop on a moved ref, also on an `optional` ref. The refs change first (with the approval of the operator), then the plan.
 - **An expiry warning.** `secrets pull`, `pull --check`, `export`, `doctor`, and `store sync` warn when the expiry date of a secret is near (`due`) or past (`expired`), for example ``secrets: warning: <VAR> (secret://<name>, <env>) expires on <date> (in <n> days). Rotate the key, then run `secrets expiry set <name> --env <env> --date <new date>`.`` The warning does not stop the command (a pull still writes the block). Tell the operator the variable, the secret name, the environment, and the date. Do not run `secrets expiry set` or `secrets expiry clear`, and do not change a date to stop a warning. The operator replaces the key at its provider, then writes the new value and its date (`secrets set <name> --env <env> --expires <date>`). An `expired` key can make the program fail with an authentication error: report the warning with the failure. Never read the value to check it.
-- **A move changes refs.** `secrets mv` and `secrets collection rename` change secret names. After such a change, the refs of the projects that use the old names are `moved`.
+- **A move changes refs.** `secrets mv` changes a secret name, also a move to `shared`. After the move, the refs of the projects that use the old name are `moved`.
 
-In a headless session, a moved ref and a removed ref are blockers. An expiry warning is not a blocker: put it in your result. See [[dev-hinit-nsec]].
+In a headless session, a moved ref, a removed ref, a value that another project has, a value in an undeclared environment, a missing value in a declared environment, and a store of the previous version are blockers. An expiry warning is not a blocker: put it in your result. See [[dev-hinit-nsec]].
 
 ## Rule 14 — The vault is for the operator
 

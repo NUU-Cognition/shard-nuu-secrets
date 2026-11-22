@@ -25,7 +25,7 @@ The block is the lines between the start marker `# >>> nuu-secrets · …` and t
 2. **Go to the app folder.** Run `secrets pull` in the folder of the `secrets.toml`, or in a child folder. When you cannot, add `--mapping <path>` or `--project <name>` (not both). For each project of the current Git repository at once, use `--all` (step 9).
 3. **Select the environment.**
    - Use the default `dev` for development and tests.
-   - Use `--env preview` only when the task needs preview values (`dev` with `preview` over it).
+   - Use `--env preview` only when the task needs preview values. `preview` reads only `preview.enc.yaml`: a required secret with no preview value stops the pull, also when dev has a value. Request the preview value ([[dev-sk-nsec-request_value]]). Do not use `dev` in its place.
    - `secrets pull` refuses `--env prod` and `--env deploy` (`✘ secrets pull writes only env dev or preview, not <env>. Production values do not go to the disk.`, `PULL_ENV`). Production values go to a platform with `secrets plan` and `secrets push` ([[dev-sk-nsec-plan_push]]). Do not try another command to get them.
 4. **Check the block first.**
    ```sh
@@ -51,11 +51,13 @@ The block is the lines between the start marker `# >>> nuu-secrets · …` and t
      `secrets: pull <project> · env <env> · store <revision> (<date>) · <n> variables → .env.local`
      - Check the project, the environment, and the count.
      - `· <n> optional not set` means that the store has no value for `<n>` `optional` entries. The block does not have these names.
+     - `· <n> not declared in <env>` means that the secrets of `<n>` entries do not declare the environment. The block does not have these names, and it is not an error. When the app needs one of them, tell the operator: the operator changes the set ([[dev-knw-nsec-rules]] § Rule 13).
      - `store not read (no ref entries)` means that the mapping has only literals for the target `local`.
      - `(unchanged)` at the end means that the bytes of the file did not change and the file has mode 600. The CLI wrote nothing, so a dev server does not restart. When only the mode was not 600, the CLI replaced the file with the same bytes at mode 600 (no `(unchanged)`): a dev server can restart.
    - Read the warnings on stderr:
      - `secrets: warning: <VAR> (secret://<name>, <env>) expires on <date> (in <n> days). …` or `… expired on <date> (<n> days ago). …` is an expiry warning. The pull still writes the block. Tell the operator the variable, the secret name, the environment, and the date. Do not run the `secrets expiry set` command of the line: it is for the operator ([[dev-knw-nsec-rules]] § Rule 13). When the program then fails with an authentication error, report the warning with the failure.
      - `secrets: warning: <VAR> → secret://<name> (optional, not set): moved to …` (or `removed on …`): the block does not have that variable. Follow [[dev-sk-nsec-diagnose]] (step 7) after the run.
+     - `secrets: warning: <VAR> → secret://<name> has a value in env <env>, and <name> does not declare env <env> … The value is not used. …`: the block does not have that variable. Report the warning with its two commands to the operator; do not run them ([[dev-knw-nsec-rules]] § Rule 13).
      - `secrets: warning: <path> is in a folder that iCloud Drive syncs. iCloud keeps a copy of the plaintext values. …`: the pull wrote the file. Tell the operator. Do not move the project yourself.
      - `secrets: warning: the dotenv npm package loses the variable __proto__ when it reads .env.local. …`: tell the operator. The operator renames the variable.
      - `secrets: cloning the store of <project> from <url>` means a first clone (a network access). Check that the secrets home is the intended one ([[dev-knw-nsec-model]] § The store). Only the operator can remove a clone (`secrets store remove`).

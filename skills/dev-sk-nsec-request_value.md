@@ -20,14 +20,16 @@ Ask the operator to write a missing value, or to make or add a key, or to do a s
 
 1. **Collect the facts.** For each missing value, get these public facts from the error or from `secrets doctor`:
    - the variable (for example `CLERK_SECRET_KEY`);
-   - the secret name (for example `clerk/secret-key`, from `secret://clerk/secret-key`);
+   - the secret name `<project>/<VARIABLE>` (for example `nuu-track/CLERK_SECRET_KEY`, from `secret://nuu-track/CLERK_SECRET_KEY` or from the implicit ref of the entry `CLERK_SECRET_KEY` in the project `nuu-track`);
    - the environment (`dev`, `preview`, `prod`, or `deploy`);
    - the store URL: the `store` field of `[project]` in `secrets.toml`;
    - the local store name: the `NAME` of the `secrets store list` row whose `URL` is that store URL. The missing-value error also names the store (`… of store <store>`). The `pull` line names a revision, not a store.
 2. **Remove what is not necessary.**
-   - `preview` reads the dev value when it has no own value. Request a preview value only when it must be different from dev.
+   - `preview` does not read `dev`. A secret that declares `preview` needs its own preview value: request it as its own value, also when it is the same as the dev value.
+   - Request a value only in an environment that the secret declares (`secrets env <name>` shows the set; no key needed). `secrets set` refuses another environment (`ENV_NOT_DECLARED`). When the task needs another set, tell the operator: the operator changes it (`secrets env <name> <envs>`).
+   - A value that another project has: do not request a second copy. The operator decides and runs the move to `shared` ([[dev-knw-nsec-rules]] § Rule 13).
    - Request `prod` or `deploy` values only when the task needs them.
-   - A platform credential is in the environment `deploy`: `vercel/token`, `vercel/team-id`, `convex/<deployment>/<env>` (a typed deploy key), or `railway/token`. Use the table of [[dev-sk-nsec-plan_push]] (step 7).
+   - A platform credential is in the environment `deploy`: `shared/VERCEL_TOKEN`, `shared/VERCEL_TEAM_ID`, `<project>/CONVEX_DEPLOY_KEY_DEV`, `…_PREVIEW`, `…_PROD` (a typed deploy key), or `shared/RAILWAY_TOKEN`. Use the table of [[dev-sk-nsec-plan_push]] (step 7).
    - Request each secret name one time for each environment, also when two variables use it.
    - A missing ref with a hint `moved to secret://…` or `removed on …` is not a missing value. Do not request a value for it: use [[dev-sk-nsec-diagnose]] (step 7).
 3. **Write the request for a value.** Use this shape. Put one command for each value:

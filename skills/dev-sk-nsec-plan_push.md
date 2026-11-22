@@ -37,7 +37,7 @@ Prepare the delivery of the variables of one environment to a platform. You run 
      | Status | Action |
      |---|---|
      | `ok` | Nothing. |
-     | `not set` (optional credential, for example `vercel/team-id`) | Nothing. Without a team id, the requests go to the personal account of the token. |
+     | `not set` (optional credential, for example `shared/VERCEL_TEAM_ID`) | Nothing. Without a team id, the requests go to the personal account of the token. |
      | `missing`, `empty` | Request the credential from the operator (step 7). |
      | `not valid` | Run `secrets plan <target> --env <env> --offline --json` with the same mapping and store options. Give the operator the matching text from `errors`. For example: a Convex key of the wrong type (`prod:` is only for `prod`; `dev:` is for `dev` and `preview`), a Convex key with no type, or a team id that is not `team_…`. Never move a key from one name to another. |
      | `no access` | The CLI cannot read `deploy.enc.yaml`: the reason can be absent deploy membership or a decrypt error. Report the fixed reason. Do not infer membership from this status alone. It is not a permission to add access, and you do not ask for group `deploy` unless the operator or the task says so. |
@@ -49,6 +49,7 @@ Prepare the delivery of the variables of one environment to a platform. You run 
      - an empty literal: report it; the operator decides the mapping;
      - `targets.railway.environments has no entry for env <env>: …`: report it; the operator decides the Railway environment (Rule 8);
      - `this machine cannot open deploy.enc.yaml: …`: see `no access` above.
+   - A variable whose secret does not declare the environment is not in the target: its line says `not declared in env <env>` (with `its value in env <env> is not used` when the store file has a value). It is not an error, and the push does not send or remove it. When the platform needs the variable, tell the operator: the operator changes the set ([[dev-knw-nsec-rules]] § Rule 13).
    - The last line is `<n> variables · <m> errors`. With an error, the exit status is 1, and a push would send nothing.
 6. **Know what the plan cannot see.** `plan` calls no platform. A successful plan does not prove that the push passes:
    - Vercel: a variable of the same name that covers the environment and also another environment or a custom environment stops the whole push.
@@ -58,10 +59,10 @@ Prepare the delivery of the variables of one environment to a platform. You run 
 
    | Target | Command for the operator | What the operator enters |
    |---|---|---|
-   | `vercel` | `secrets set vercel/token --env deploy` | A Vercel access token. |
-   | `vercel` | `secrets set vercel/team-id --env deploy` | The team id `team_…` (optional). |
-   | `convex` | `secrets set convex/<deployment>/<env> --env deploy` | A typed deploy key of that deployment: `prod:…` for `prod`, `dev:…` for `dev` and `preview`. |
-   | `railway` | `secrets set railway/token --env deploy` | A Railway account token or workspace token, not a project token. |
+   | `vercel` | `secrets set shared/VERCEL_TOKEN --env deploy` | A Vercel access token. |
+   | `vercel` | `secrets set shared/VERCEL_TEAM_ID --env deploy` | The team id `team_…` (optional). |
+   | `convex` | `secrets set <project>/CONVEX_DEPLOY_KEY_<ENV> --env deploy` (`DEV`, `PREVIEW`, or `PROD`; `<project>` is the `[project] name`) | A typed deploy key of the deployment of that environment: `prod:…` for `prod`, `dev:…` for `dev` and `preview`. |
+   | `railway` | `secrets set shared/RAILWAY_TOKEN --env deploy` | A Railway account token or workspace token, not a project token. |
 
    Only a machine in group `deploy` can open `deploy.enc.yaml`.
 8. **Give the operator the commands.** When the plan has no error, write this request. Do not add `--yes`:
