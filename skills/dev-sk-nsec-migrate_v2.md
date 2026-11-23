@@ -31,17 +31,18 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
    - `npm install -g …` of the CLI (an agent does not install it);
    - `git tag`, `git push`, `git revert`, and each other Git write in the store or in a backup clone of the store;
    - an edit of `.env.local` or another `.env*` file (Rule 15), and an edit of a plan file;
-   - `secrets pull --force`.
+   - `secrets pull` and `secrets pull --all` during the migration (they write `.env.local`; `secrets pull --check` is a read), and `secrets pull --force`.
 
 3. **Check the versions.**
    - `secrets --version`: it must be `0.4.0-beta.0` or later. `secrets --help` must list `pull` and `store`, and `secrets store migrate --help` must exist. Else ask the operator to install `npm install -g @nuucognition/secrets-cli@0.4.0-beta.0` (step 2 of the guide).
    - `secrets store list`: the store is in the list.
    - `secrets whoami`: the groups of this machine. The apply needs a machine with `dev`, `prod`, and `deploy`. Report the groups.
 
-4. **Check the store.** Run plain `secrets doctor` in a project folder of the store (Rule 6). Read the store section:
+4. **Check the store.** Run plain `secrets doctor` in each project folder of the store (Rule 6). Read the `fail` lines:
    - `fail  store format 1 (no store.toml): … needs format 2 …`: the store needs the migration. Continue.
+   - `fail  <path>/secrets.toml is not valid:` (or `secrets.local.toml`) with only the lines `env.<VAR>.ref must be secret://<project>/<VARIABLE>, …` and `env.<VAR>.ref: secret://<name> is a secret of the project "<p>": a ref can point only to the project shared or to the project itself …`: these are the old refs of a valid project of the previous version. They are expected until the refs fix (step 8 of the guide). Continue, and list them in the report.
    - `ok  store format 2 (store.toml): …`: the store needs no migration (`secrets store migrate --plan` also says `… has the store format 2: it needs no migration.`). Report it and stop. When the project files still have old names, give the operator step 8 of the guide (`secrets refs fix --all … --dry-run` first).
-   - Each other `fail` line: report it with [[dev-sk-nsec-diagnose]] first. The migration waits.
+   - Each other `fail` line (another problem of a project file, a key, a recipient, or the store): report it with [[dev-sk-nsec-diagnose]] first. The migration waits. When the operator still has the old CLI, ask the operator to run `secrets doctor` with it in each project: each project must show `0 fail` before the migration ([[dev-knw-nsec-migrate_v2]] § Before you start).
 
 5. **Make the plan (read only).** The plan changes no store file and no project file. It writes only the plan file (names only, never a value). It refreshes the clone: follow the refresh rule of Rule 6, or add `--offline` after a plain `doctor`:
 
@@ -49,27 +50,28 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
    secrets store migrate --plan --store <store> --projects <repo> --out <plan>
    ```
 
-   Give `--projects` one time for each repository. Do not add `--force` to replace a plan file that the operator edited: use another `--out`, or ask the operator.
+   Give `--projects` one time for each repository. The path of `<plan>` must have no symbolic link in any part (on macOS, not `/tmp`): else `BAD_PLAN`, and nothing is written. Use a path in the home folder. Do not add `--force` to replace a plan file that the operator edited: use another `--out`, or ask the operator.
 
 6. **Read the plan.** Read the output and the plan file (it holds names only). Report to the operator:
    - the count line (`<n> name(s) of before v2, <n> project(s) in <n> file(s)`);
    - each conflict, by kind, with what the guide says to do (step 5 of the guide);
    - each line with `no preview value` in its comment: after the apply, the operator gives it a preview value or removes `preview` from its set (step 7 of the guide). Propose which one, when the task says if the app has a preview;
+   - the names with no rename (`No rename for <n> name(s): …`): the apply writes only their sets and tags;
    - the collection records that become tag records;
    - each `secrets: warning:` line of the plan (a project file that the CLI cannot read).
 
    Do not edit the plan file. Propose each change (`to`, `envs`, `tags`) with the line, and the operator edits the file.
 
 7. **Give the operator the write commands in order.** Use the exact commands of [[dev-knw-nsec-migrate_v2]], with the real `<store>`, `<url>`, `<repo>`, and `<plan>`:
-   1. the backup clone and the tag `before-v2` (step 1);
+   1. the backup clone and the tag `before-v2`, and the backup of the local files of each machine (`projects.toml` and each `secrets.local.toml`) (step 1);
    2. the CLI update on each machine and in CI (step 2), and the stop of the writes of the other machines;
    3. the plan edits of step 6 above, if any;
    4. `secrets store migrate --apply <plan>` (step 6 of the guide);
-   5. for each name of the preview list: `secrets set <name> --env preview`, or `secrets env <name> dev,prod` (step 7);
+   5. for each name of the preview list: `secrets set <name> --env preview`, or `secrets env <name> <the declared set with no preview>` (step 7). Read the set with `secrets env <name>` (a read: you can run it) and give the exact set: `dev, preview` gives `secrets env <name> dev`; `dev, preview, prod` gives `secrets env <name> dev,prod`. Never add an environment that the set does not have;
    6. `secrets refs fix --all --projects <repo> --plan <plan> --yes`, after the dry run of step 8 below;
    7. `secrets project add <repo>` (step 9);
    8. the old scripts and the old `.env*` lines (steps 10 and 11);
-   9. `secrets pull --all` and the commit of the project files (steps 12 and 14);
+   9. `secrets pull --all` (it writes the `.env.local` files: an operator step here) and the commit of the project files (steps 12 and 14);
    10. the steps of each other machine.
 
    Give them as one numbered list. Say that the apply is one commit and one push to the team store, and that the rollback is in the guide.
@@ -85,9 +87,10 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
 9. **After the refs fix of the operator: the checks.** Run only these:
    - `secrets project add <repo> --dry-run`: report the projects to add (the operator runs it without `--dry-run`, step 9 of the guide);
    - `secrets pull --check --all`: report each `line <n>: <VAR>` outside the block. The operator removes these lines. Do not open the file;
-   - `secrets doctor` in each project folder: report the last line of each, and each `fail` line. The goal is `0 fail` in each project.
+   - after the operator ran `secrets pull --all`: `secrets pull --check --all` again. Each project must be current;
+   - `secrets doctor` in each project folder, with the path-safe check of step 13 of the guide: report the folder, the exit status, and the last line of each, and each `fail` line. The goal is `exit 0` and `0 fail` in each project.
 
-   After the operator removed the old lines and ran `secrets project add`, you can run `secrets pull --all` and the normal dev command ([[dev-sk-nsec-run_app]]).
+   Do not run `secrets pull --all` in this skill: it writes the `.env.local` files, and each write of the migration is an operator step. A later app run is not a part of this skill.
 
 10. **Find the old prefix.** Search the repositories for the old command, for example `grep -rn --include=package.json '"secret ' <repo>` and a search for `secrets run` in the documents. Report each file and line. You can change a script or a document when the task allows a change of the repository (`"secret next dev"` → `"next dev"`), with the commit rules of the repository. Never add `secrets pull` to the scripts.
 

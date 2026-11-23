@@ -44,7 +44,8 @@ A new store of `0.4.0-beta.0` (`secrets store init`) has format 2 at once. It ne
 
 - **One migration machine.** It must open each store file: its recipient has the groups `dev`, `prod`, and `deploy` (`secrets whoami`). The apply decrypts each file that holds a name of the plan.
 - **The repositories.** Clone or pull each repository that has a `secrets.toml` of this store. `git status` must show no change of a `secrets.toml` file.
-- **The plan file.** Keep it outside each repository, for example `~/secrets-migrate-<store>.toml`. It holds names only, never a value.
+- **A clean start with the old CLI.** Before step 2, run `secrets doctor` with the old CLI in each project folder. Each project must show `0 fail`. A `fail` line that is there before the migration is not a migration failure: fix it first ([[dev-sk-nsec-diagnose]]).
+- **The plan file.** Keep it outside each repository, for example `~/secrets-migrate-<store>.toml`. It holds names only, never a value. The CLI refuses a symbolic link in any part of the path of the plan file (the file and each folder above it): `BAD_PLAN`, and nothing is written. On macOS, `/tmp` is a link to `/private/tmp`, so a plan file in `/tmp` is refused: use a path in your home folder, or the real path (`/private/tmp/…`).
 - **The other machines.** Tell the team: no store write from another machine from step 4 until the end of step 12.
 
 In the commands below, `<store>` is the store name of `secrets store list`, `<url>` is its URL, `<repo>` is the folder of one repository (give `--projects` one time for each repository), and `<plan>` is the path of the plan file.
@@ -61,6 +62,18 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
 
    Keep the folder `store-before-v2` until the end of the migration. The rollback uses it ([Rollback](#rollback)).
 
+   **Also back up the local files of each machine** (on the migration machine now, and on each other machine before its first command of the v2 CLI). The migration changes the `secrets.local.toml` files (step 8), and the v2 CLI writes a new form of `projects.toml` (the project index, with the identity of each project). The rollback restores these copies. The files hold names and paths, never a value. Keep the copy private and outside each repository (run the commands in `bash`):
+
+   ```sh
+   B=~/secrets-before-v2
+   mkdir -p -m 700 "$B"
+   cp -p "<secrets home>/projects.toml" "$B/projects.toml"
+   cd <repo> && find . -name secrets.local.toml -not -path '*/node_modules/*' -print0 |
+     while IFS= read -r -d '' f; do mkdir -p "$B/<repo name>/$(dirname "$f")" && cp -p "$f" "$B/<repo name>/$f"; done
+   ```
+
+   `<secrets home>` is `$SECRETS_HOME`, else `~/.nuucognition/secrets` ([[dev-knw-nsec-model]]). Do the `find` line one time for each repository, with its own `<repo name>`. A machine with no `projects.toml` has no index to back up.
+
 2. **Update the CLI on each machine first.** On each machine of the team, also on each CI machine that runs `secrets plan` or `secrets push`:
 
    ```sh
@@ -70,7 +83,14 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
 
    Give the exact version: an npm tag can give an older version. After this step, no machine may write the store with the old CLI.
 
-3. **Check the store.** Run `secrets store list` (the store is in the list) and `secrets doctor --online`. The `fail` line `store format 1 (no store.toml)` is expected. Each other `fail` line must be fixed first ([[dev-sk-nsec-diagnose]]).
+3. **Check the store.** Run `secrets store list` (the store is in the list), then `secrets doctor --online` in each project folder. Until step 8, the v2 CLI gives these `fail` lines for a valid project of the previous version. They are expected:
+
+   - `store format 1 (no store.toml): this CLI (0.4.0-beta.0) needs format 2 …` (section Store).
+   - `<path>/secrets.toml is not valid:` (also `<path>/secrets.local.toml`), with only these lines:
+     - `env.<VAR>.ref must be secret://<project>/<VARIABLE>, for example secret://shared/<VARIABLE>` (an old lowercase name);
+     - `env.<VAR>.ref: secret://<name> is a secret of the project "<p>": a ref can point only to the project shared or to the project itself (move the value to shared/<x>)` (an old name whose first segment is not the project).
+
+   Each other `fail` line is a blocker: stop, and fix it first ([[dev-sk-nsec-diagnose]]). A project that was `0 fail` with the old CLI (see [Before you start](#before-you-start)) has no other `fail` line. Step 8 changes the refs, and step 13 needs `0 fail` in each project.
 
 4. **Make the plan.** It changes no store and no project file. It reads the names of the store files (no decrypt) and the refs of the projects:
 
@@ -78,9 +98,10 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
    secrets store migrate --plan --store <store> --projects <repo> --out <plan>
    ```
 
-   - The output: `Store <store> has the store format 1 @ <revision>: <n> name(s) of before v2, <n> project(s) in <n> file(s).`, a table `OLD NAME`, `NEW NAME`, `ENVS`, `TAGS`, `USED BY`, the collection records that become tag records, the conflicts, and the path of the plan file.
-   - The rules of the new names: a name of one project goes to `<project>/<VARIABLE>`; a name of two or more projects goes to `shared/<VARIABLE>`; a credential gets its fixed name and the set `deploy`; a Convex deploy key goes to the project whose `[targets.convex] deployment` is its deployment, with the tag `#convex/deploy-keys`. Each name gets the tag of its old collection. A name with a dev value declares `preview` (before v2, preview read the dev value).
+   - The output: `Store <store> has the store format 1 @ <revision>: <n> name(s) of before v2, <n> project(s) in <n> file(s).`, a table `OLD NAME`, `NEW NAME`, `ENVS`, `TAGS`, `USED BY`, the names with no rename (`No rename for <n> name(s): <names> (each one is already a v2 name; the apply writes only its set and its tags).`), the collection records that become tag records, the conflicts, and the path of the plan file.
+   - The rules of the new names: a name of one project goes to `<project>/<VARIABLE>`; a name of two or more projects goes to `shared/<VARIABLE>`; a credential gets its fixed name and the set `deploy`; a Convex deploy key goes to the project whose `[targets.convex] deployment` is its deployment, with the tag `#convex/deploy-keys`. Each name gets the tag of its old collection. A name with a dev value declares `preview` (before v2, preview read the dev value). An old name that is already a v2 name (for example `web/token` for the variable `token` of the project `web`) needs no rename: its line has `to` = its own name.
    - The plan file exists already: add `--force` to replace it. Without `--force`: `PLAN_EXISTS`.
+   - A symbolic link in the path of `--out` (for example `/tmp` on macOS): `BAD_PLAN`, and nothing is written. Give a real path.
 
 5. **Read the conflicts, and edit the plan.** The kinds of conflict:
 
@@ -94,7 +115,8 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
 
    Each line of `[moves]` in the plan file is `"<old name>" = { to = "<new name>", envs = [...], tags = [...] }`, with a comment line of facts above it (the projects, the variables, the environments with a value, and `no preview value`). Change only `to`, `envs`, and `tags`:
 
-   - `envs`: keep each environment that has a value now. Remove `preview` from a secret that has no preview (then step 7 has no line for it).
+   - `envs`: keep each environment that has a value now. Remove `preview` from a secret that has no preview, and keep the other environments of the line (`["dev", "preview"]` → `["dev"]`; `["dev", "preview", "prod"]` → `["dev", "prod"]`). Then step 7 has no line for it.
+   - A line whose `to` is its own name needs no rename. The apply writes only its `envs` and its `tags`. You can give it a new name.
    - `tags`: the tags with no `#`, for example `["clerk"]` or `["convex/deploy-keys"]`.
    - When the store changed after the plan, make the plan again (step 4 with `--force`), and check it again.
 
@@ -104,18 +126,28 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
    secrets store migrate --apply <plan>
    ```
 
-   - The output: one line `moved  <old> → <new>  (<envs>)` for each name, `no value  <old> → <new>  (refs only: …)` for a name with refs and no value, `tag records  #<tag> …  (from collections.toml)`, then `Store <store> has the store format 2 @ <revision>: <n> name(s) moved, <n> declared set(s) written, <n> name(s) tagged.`, then the preview list (step 7), then the `Next:` line.
-   - The commit moves each name in each store file (one `move` line of the change log each), writes the declared sets that are not the default (`env-set-change`), the tags (`tag-add`), the tag records from `collections.toml` (`tag-record-change`; `collections.toml` goes), the expiry dates with the names, and `store.toml` with `format = 2`.
-   - The refusals (exit 1, nothing written): `NOT_FORMAT_1` (the store has format 2 already), `PLAN_STALE` (the store has a name that the plan does not have: make the plan again), `PLAN_MISMATCH` (the plan does not fit the store; the lines name each problem), `STORE_MISMATCH` (`--store` names another store than the plan), `BAD_TAG`, `NO_PLAN`, and `BAD_PLAN` (the plan file is missing, is a symbolic link, is too large, or cannot be read).
+   - The output: one line `moved  <old> → <new>  (<envs>)` for each moved name, `kept  <name>  (no rename; <envs>)` for each name with no rename, `no value  <old> → <new>  (refs only: …)` for a name with refs and no value, `tag records  #<tag> …  (from collections.toml)`, then `Store <store> has the store format 2 @ <revision>: <n> name(s) moved, <n> name(s) with no rename, <n> declared set(s) written, <n> name(s) tagged.` (the part `with no rename` only when there is such a name), then the preview list (step 7), then the `Next:` line. With `--json`, the names with no rename are in the field `stayed`.
+   - The commit moves each moved name in each store file (one `move` line of the change log each; a name with no rename gets no `move` line, and the commit message has the line `<name> (no rename)`), writes the declared sets that are not the default (`env-set-change`), the tags (`tag-add`), the tag records from `collections.toml` (`tag-record-change`; `collections.toml` goes), the expiry dates with the names, and `store.toml` with `format = 2`.
+   - The refusals (exit 1, nothing written): `NOT_FORMAT_1` (the store has format 2 already), `PLAN_STALE` (the store has a name that the plan does not have: make the plan again), `PLAN_MISMATCH` (the plan does not fit the store; the lines name each problem), `STORE_MISMATCH` (`--store` names another store than the plan), `BAD_TAG`, `NO_PLAN`, and `BAD_PLAN` (the plan file is not a regular file, is too large, or cannot be read; a symbolic link in any part of its path; a folder that does not exist or that changes during the command).
 
 7. **Give each preview secret its own value.** The apply lists each secret that declares `preview` and has no preview value: `<n> secret(s) declare preview and have no preview value (before v2, preview read the dev value):`. For each name of the list, do one of these:
 
-   ```sh
-   secrets set <name> --env preview        # the preview value (before v2, it was the dev value)
-   secrets env <name> dev,prod              # or: remove preview from its set
-   ```
+   - Give it its own preview value: `secrets set <name> --env preview`. Type the value at the hidden prompt, or give it on stdin. Never give a value as an argument.
+   - Or remove `preview` from its set, and keep each other environment of the set. Read the set first:
 
-   Type the value at the hidden prompt, or give it on stdin. Never give a value as an argument.
+     ```sh
+     secrets env <name>                       # <name>  declared <set> [(the default)]  values <envs>  store …
+     ```
+
+     Then give the set with no `preview`:
+
+     | The declared set now | The command |
+     |---|---|
+     | `dev, preview, prod` | `secrets env <name> dev,prod` |
+     | `dev, preview` | `secrets env <name> dev` |
+     | `preview, prod` | `secrets env <name> prod` |
+
+     Do not add an environment: a set with `prod` and no prod value gives a `fail` line for `prod` in `doctor`.
 
 8. **Change the refs of each repository.** First the dry run, then the change:
 
@@ -157,11 +189,16 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
 
     Each project gets the line `secrets: pull <project> · env dev · store <revision> (<date>) · <n> variables → <path>/.env.local`.
 
-13. **Check each project.** Each line must show `0 fail`:
+13. **Check each project.** Run the check in `bash`. It is safe for a path with spaces, and it gives the exit status of `doctor` for each project:
 
     ```sh
-    cd <repo> && for d in $(git ls-files '*secrets.toml' | xargs -n1 dirname); do (cd "$d" && secrets doctor | tail -1); done
+    cd <repo> && git ls-files -z -- '*secrets.toml' | while IFS= read -r -d '' f; do
+      d=$(dirname "$f"); out=$(cd "$d" && secrets doctor 2>&1); s=$?
+      printf '%s  exit %s  %s\n' "$d" "$s" "$(printf '%s\n' "$out" | tail -n 1)"
+    done
     ```
+
+    Each line must show `exit 0` and `0 fail`. A line with `exit 1` names the project: run `secrets doctor` in that folder, and read the `fail` lines.
 
     Expected warnings: an `optional` ref with no value in the store (`the local project <p> has <n> ref(s) to its own store project, and the store has no secret of <p>`), and on macOS `full-disk encryption is not checked on darwin`.
 
@@ -171,13 +208,13 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
 
 After step 14 of the migration machine:
 
-1. Install the CLI `0.4.0-beta.0` (step 2), if it is not installed yet.
+1. Back up the local files of this machine (step 1: `projects.toml` and each `secrets.local.toml`) before the first command of the v2 CLI. Then install the CLI `0.4.0-beta.0` (step 2), if it is not installed yet.
 2. `secrets store sync` (it shows the change-log lines of the migration).
 3. `git pull` in each repository.
 4. `secrets project add <repo>`.
 5. `secrets refs fix --all --projects <repo> --dry-run`, then the same with `--yes`. This changes only the `secrets.local.toml` files of this machine (the `secrets.toml` files are changed already). Give `--plan <plan>` too when a local ref has no `move` line (copy the plan file from the migration machine: it holds names only).
 6. Remove the old managed lines of the `.env*` files (step 11).
-7. `secrets pull --all`, then `secrets doctor` in each project (0 fail).
+7. `secrets pull --all`, then the check of step 13 (each project `exit 0` and `0 fail`).
 
 A machine that still has the old CLI must not write the store.
 
@@ -205,24 +242,38 @@ Use the rollback when the migration has a problem and the team must go back to t
    The revert removes `store.toml` and `tags.toml`, and brings back the old names and `collections.toml`. The store has format 1 again. A store write after the migration (for example a preview value of step 7) is a commit after the migration commit: revert it first, newest first. The tag `before-v2` shows the old state: compare with `git -C store-before-v2 diff before-v2 HEAD --stat`.
 3. **Revert the project commits** of step 14 in each repository (`git revert`), so that the refs have the old names again.
 4. **Install the old CLI** on each machine: `npm install -g @nuucognition/secrets-cli@0.3.0-beta.0`. Then `secrets store sync`. The CLI `0.4.0-beta.0` refuses the store of format 1 again.
-5. The block of `.env.local` stays. The old CLI does not read it, and a program can still read it. Remove it when you want.
+5. **Restore the local files** of each machine from the backup of step 1. The revert of step 3 does not change them: `secrets.local.toml` is not in Git, and the old CLI refuses the v2 refs of a `secrets.local.toml` (`env.<VAR>.ref must be secret://<name>, where <name> is a lowercase path like clerk/secret-key`) and the new fields of `projects.toml` (`an unknown field (use path, name, store, identity, seen)`):
+
+   ```sh
+   B=~/secrets-before-v2
+   cp -p "$B/projects.toml" "<secrets home>/projects.toml"
+   cd "$B/<repo name>" && find . -name secrets.local.toml -print0 |
+     while IFS= read -r -d '' f; do cp -p "$f" "<repo>/$f"; done
+   ```
+
+   The copy of `projects.toml` keeps the identity of each project. A `secrets.local.toml` that is not in the backup was made after the migration: remove it, or change its refs to the old names. Then run `secrets doctor` with the old CLI in each project folder: each project must show `0 fail`.
+6. The block of `.env.local` stays. The old CLI does not read it, and a program can still read it. Remove it when you want.
 
 ## The test of this guide
 
-Task 035 followed this guide on a test store of format 1 made with the CLI `0.3.0-beta.0` (canon `a67936c`), in a scratch folder with test values only, two projects (`web` and `api`), a shared name, a credential (`vercel/token`), a collection record, an expiry date, an optional ref with no value, an old `secret` script, and a managed line in `.env.local`. The CLI of the steps was the build of `Repos/secrets` at `1aadb82`. The result:
+Task 035 followed this guide two times on a test store of format 1 made with the CLI `0.3.0-beta.0` (the code of canon `a67936c`), in a scratch folder with test keys and test values only. The second run (the fix round of the review, 2026-11-23) used the CLI source of `Repos/secrets` at `010304c` (the fixes `5afea88`, `168725d`, and `6ee9194`). The fixture: three projects (`web`, `api`, and `space-app` in the folder `apps/space app`, a path with a space), a name of three projects, a credential (`vercel/token`), a collection record, an expiry date, an optional ref with no value, a name with no rename (`web/token`), a dev-only name (`db/url`), an old `secret` script, a `secrets.local.toml` with an old ref, and a managed line in `.env.local`. The result of the second run:
 
-- The plan: 4 old names, 2 projects in 2 files, 1 conflict (a ref with no value). The plan edit removed `preview` from `db/url`.
-- The apply: 3 names moved, 1 declared set, 3 names tagged, the tag record `#clerk`, `store.toml` with `format = 2`, one commit.
-- `refs fix --all --projects <repo> --plan <plan>`: 4 refs in 2 files (2 links to `shared`, 2 implicit refs). A second run: `No ref needs a fix.`
-- `secrets pull --all` stopped on the old line of `.env.local` (`line 1: CLERK_SECRET_KEY`) until step 11 removed it. Then both projects pulled.
-- `secrets doctor` in each project: `23 ok, 2 warn, 0 fail, 0 skipped` (the optional ref with no value, and full-disk encryption on darwin).
-- `secrets plan vercel --env prod --offline`: `key  deploy.enc.yaml → shared/VERCEL_TOKEN  ok`, 0 errors.
-- The rollback: the revert of the migration commit and of the project commit; the old CLI ran again, and the new CLI refused the old names.
+- Before step 2, the old CLI gave `0 fail` in each project. Step 1 backed up the store (the clone and the tag) and the local files (`projects.toml` and the `secrets.local.toml` of `web`, in a folder with mode 700).
+- Step 3: the v2 CLI gave 2 `fail` lines in each project, only the expected ones (the store format 1, and the old refs of `secrets.toml` and `secrets.local.toml`). The loop of step 13 gave `exit 1` for each of the three projects, also for `apps/space app`.
+- The plan: `No rename for 1 name(s): web/token`. A plan path with a symbolic link was refused, and no file was written.
+- The apply: `4 name(s) moved, 1 name(s) with no rename, 2 declared set(s) written, 5 name(s) tagged`, the line `kept  web/token  (no rename; dev)`, one commit, and the preview list of 4 names.
+- Step 7: a preview value for `shared/CLERK_SECRET_KEY`; `secrets env <name>` read the sets, then `secrets env space-app/SPACE_KEY dev,prod`, `secrets env web/DB_URL dev`, and `secrets env web/token dev` (no environment was added).
+- `refs fix --all --projects <repo> --plan <plan>`: a second dry run gave `No ref needs a fix.`
+- `secrets pull --check --all` named `line 1: CLERK_SECRET_KEY` of the old `.env.local`. After step 11 removed it, `secrets pull --all` wrote the three projects.
+- Step 13 (bash): `apps/api  exit 0  doctor: 24 ok, 1 warn, 0 fail, 0 skipped`, `apps/space app  exit 0  doctor: 24 ok, 1 warn, 0 fail, 0 skipped`, and `apps/web  exit 0  doctor: 25 ok, 1 warn, 0 fail, 0 skipped`.
+- `secrets plan vercel --env prod --offline` passed. No test value was in the CLI output, the plan, or a Git object; only the `.env.local` files (mode 600) had values.
+- The rollback: the revert of the later store writes and of the migration commit (no difference to the tag `before-v2`), the revert of the project commit, `secrets store sync` with the old CLI, then the restore of `projects.toml` and `secrets.local.toml` from the backup. The old CLI then gave `0 fail` in each project, and the v2 CLI refused the store of format 1 again.
 
 ## Known limits
 
 1. The plan does not read comments, and `refs fix` does not change them.
 2. A CLI of `0.3.0-beta.0` or earlier does not know `store.toml`: step 2 is the only protection.
 3. The apply needs one machine that opens each store file (`dev`, `prod`, `deploy`).
-4. The README of the CLI (`apps/secrets-cli/README.md`, commit `543ebdf` of `even-macbook`) has the sections of the store format and of `secrets store migrate`. This guide gives the order of the steps for a team, and `secrets store migrate --help` gives the options.
-5. The review of Task 029 (2026-11-23) found 3 defects in the build `1aadb82`. Two are fixed on `even-macbook`: `refs fix --all --plan <plan>` changes only the refs of the store of the plan (F1, `5afea88`), and the plan file is read and written with no symbolic link in any part of its path (F2, `168725d`; a link gives `BAD_PLAN`). The fix of F3 is in progress: a lowercase variable whose old name is already `<project>/<variable>` gives a plan that the apply refuses. Use a CLI with all three fixes (the release `0.4.0-beta.0`). With an older build: register only the store of the migration on the migration machine (`secrets store list`), write the plan to a folder with no symbolic link in its path, and read the `--dry-run` list of step 8 line by line. The commands and the options of this guide do not change.
+4. The README of the CLI (`README.md` of `NUU-Cognition/secrets`, commit `010304c` of `even-macbook`) has the sections of the store format and of `secrets store migrate`. This guide gives the order of the steps for a team, and `secrets store migrate --help` gives the options.
+5. The review of Task 029 (2026-11-23) found 3 defects in the build `1aadb82`. All three are fixed on `even-macbook`: `refs fix --all --plan <plan>` changes only the refs of the store of the plan (`5afea88`); the plan file is read and written with no symbolic link in any part of its path (`168725d`); a name that needs no rename is not a move, and each plan of `--plan` parses (`6ee9194`). Use the release `0.4.0-beta.0`, which has these fixes.
+6. The plan does not back up the local files of a machine (`secrets.local.toml`, `projects.toml`). Step 1 does it.
