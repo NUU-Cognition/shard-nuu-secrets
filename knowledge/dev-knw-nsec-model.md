@@ -12,6 +12,7 @@ One team has one store: a private Git repository. Each value in it is encrypted.
 
 | File | Content | Group |
 |---|---|---|
+| `store.toml` | The store format: one line, `format = 2`. The CLI reads it before each read of values and each write, and refuses a store of another format (`STORE_FORMAT`). A store with no `store.toml` has the store format 1 (the previous version). Plaintext. | — |
 | `recipients.toml` | The recipients (age public keys) and their groups. Plaintext. | — |
 | `.sops.yaml` | The SOPS policy. The CLI makes it from `recipients.toml`. | — |
 | `.gitleaks.toml` | The gitleaks configuration. The CLI makes it. It keeps the default rules of gitleaks and allows only the recipient key lines of `recipients.toml` (`key = "age1…"`). A token in another file, and any other token in `recipients.toml`, is still a finding. The secret scan of the CLI uses the same generated text, but it does not read this file. An existing store needs one `secrets store fix-config` by the operator to get the text of canon `35ecaba` ([[dev-knw-nsec-cli]] § The config of stores). | — |
@@ -130,7 +131,7 @@ A tag is a label for secrets and vault entries, for example `#convex` or `#conve
 
 ## A store of the previous version
 
-A store of the previous version has lowercase path names (for example `clerk/secret-key`), and it can have a plaintext file with the records of its groups by provider. The CLI still reads the old names (`secrets list`, `doctor`, `log`), and `doctor` warns for them. A store of the previous version needs the migration; the guide comes with Task 035. The migration is an operator write ([[dev-knw-nsec-rules]] § Rule 13).
+A store of the previous version has lowercase path names (for example `clerk/secret-key`), and it can have a plaintext file with the records of its groups by provider. The CLI still reads the old names (`secrets list`, `doctor`, `log`), and `doctor` warns for them. A store of the previous version has no `store.toml` (the store format 1). The v2 CLI refuses its reads and its writes (`STORE_FORMAT`), and only `doctor`, `whoami`, `store list`, `store sync`, `store clone`, `store remove`, and `store migrate` still run on it. A store of the previous version needs the migration: the guide is [[dev-knw-nsec-migrate_v2]]. The migration is an operator write ([[dev-knw-nsec-rules]] § Rule 13).
 
 ## Expiry dates
 
@@ -139,6 +140,7 @@ A secret can have one expiry date in each environment: the first day on which it
 - **The state** on a day: `expired` from the date on; `due` when the date is inside the warning window; else `ok`. The window is the `warn-days` of the entry. Else, for each tag of the secret, the `warn-days` of the nearest tag record that has one (the record of the tag, else of its parent, and so on up); with two or more tags, the largest of these windows. Else 14 days. The day is the local date of this machine.
 - **Warnings, never errors.** The date is the estimate of a person. `pull` (also `pull --check`) and `export` write one stderr line for each mapped secret of the environment that is `due` or `expired`. For `preview`, the date of the preview value. `doctor` shows each one as a `warn` line. `secrets store sync` lists the `due` and `expired` secrets of the store.
 - **The other writes keep the dates right.** `unset`, `edit`, and the page remove the date of a removed name. `mv` moves the dates with the name. A new value does not change the date: the operator sets the date of the new key (`secrets set <name> --env <env> --expires <date>`, or `secrets expiry set`).
+- **The same value, the same date.** A write of a date (`expiry set`, `expiry clear`, `set --expires`) also changes the date of each other place with the same plaintext inside the recipient group of the value (`dev` with `preview`, `prod` alone, `deploy` alone). `--all-groups` compares each group that the machine opens, and `--only` changes the one value. The compare reads values on the machine of the operator and writes names only.
 - The operator sets and clears the dates. You report a warning ([[dev-knw-nsec-rules]] § Rule 13).
 
 ## The change log and moved refs

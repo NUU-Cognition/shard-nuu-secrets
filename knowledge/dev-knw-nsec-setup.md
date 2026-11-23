@@ -27,7 +27,7 @@ Use this file when an operator sets up NUU Secrets: a new team (a new store), a 
 | Remove a project from the project index | Operator | `secrets project forget <name\|path>` |
 | Show the names by project, the environment sets, the tags, the change log, the refs, the expiry dates, and the vault entry names | Agent or operator | `secrets list`, `secrets env <name>`, `secrets tag list`, `secrets log`, `secrets refs`, `secrets refs fix --dry-run`, `secrets expiry list`, `secrets vault list` |
 | Rename a secret, move a value to `shared`, change the tags or the environment sets, set the expiry dates | Operator (an agent only with the approval of the operator) | `secrets mv`, `secrets tag add\|rm\|edit\|rename`, `secrets vault tag add\|rm`, `secrets env <name> <envs>`, `secrets expiry set\|clear`, `secrets set … --expires <date>` |
-| Migrate a store of the previous version | Operator only (never an agent) | A store of the previous version needs the migration; the guide comes with Task 035. |
+| Migrate a store of the previous version | Operator only (never an agent) | The guide: [[dev-knw-nsec-migrate_v2]]. Update the CLI on each machine first. |
 | Fix the moved refs of the projects | Operator (an agent only with the approval of the operator) | `secrets refs fix` |
 | Read and write the vault | Operator only (never an agent) | `secrets vault show\|edit\|set`, or the Vault view of `secrets ui` |
 | Rename, move, or remove a vault entry | Operator (an agent only with the approval of the operator) | `secrets vault mv\|rm` |
@@ -197,6 +197,8 @@ secrets tag edit convex --description "Convex deploy keys" --url https://dashboa
 secrets tag rename convex convex-cloud                         # also each child tag and each record
 secrets set shared/OPENAI_API_KEY --env prod --expires 2027-01-31     # a new value and its expiry date in one commit
 secrets expiry set shared/OPENAI_API_KEY --env prod --date 2027-01-31 # the date only (--env is required)
+secrets expiry set shared/OPENAI_API_KEY --env prod --date +90d       # today plus 90 days
+secrets expiry set shared/OPENAI_API_KEY --env prod --date +90d --only   # this value alone
 secrets expiry list --due                                      # the secrets that are due or expired
 secrets log --tag convex                                       # the change log of a tag, newest first
 ```
@@ -204,8 +206,9 @@ secrets log --tag convex                                       # the change log 
 - **A move breaks refs.** After `mv` (also a move to `shared`), the projects that use the old name have moved refs. On each machine, after `secrets store sync`, the operator (or an agent with the approval of the operator) runs `secrets refs --all`, then `secrets refs fix --all` (or binds the link), and commits the changed `secrets.toml` files.
 - **A ref can point only to `shared` or to the own project.** A value of one project that a second project needs moves to `shared` first. `bind` refuses a name of another project (`BAD_LINK`).
 - **Declared environments.** A secret gets a value only in an environment that it declares (`ENV_NOT_DECLARED`). `secrets env <name> <envs>` refuses a set that leaves a value outside it (`ENV_HAS_VALUE`): remove the value first. A value in an undeclared environment is not delivered, and `doctor` warns.
+- **The same value in other places.** `expiry set`, `expiry clear`, and `set --expires` also change the date of each other place (a name in an environment) with the same plaintext, inside the recipient group of the value: `dev` with `preview`, `prod` alone, `deploy` alone. The output names each place (`The same value is in <n> other place(s). Each gets the same date:`) and each store file that this machine does not open (`not read: <file> (…). Its values were not compared.`). `--all-groups` also compares the other groups that this machine opens: the commit then shows each member of the store that these places changed together. `--only` changes the one value. `--only` with `--all-groups` is refused. Each other place keeps its own warning window.
 - **Rotation.** An expiry warning means: replace the key at its provider, then `secrets set <name> --env <env> --expires <new date>`. A new value does not change the date. The warning window comes from the entry, else from the nearest tag record with `warn-days`, else 14 days.
-- **A store of the previous version.** It has lowercase path names and can have the records of its groups by provider. A store of the previous version needs the migration; the guide comes with Task 035. No agent migrates a store or the secrets of a local repository.
+- **A store of the previous version.** It has lowercase path names and can have the records of its groups by provider. A store of the previous version (no `store.toml`: the store format 1) needs the migration: the guide is [[dev-knw-nsec-migrate_v2]]. No agent migrates a store or the secrets of a local repository.
 - **The page.** The page of `secrets ui` shows the store projects in the side bar, the expiry badges, Activity (the change log), and Health (moved refs, removed refs, due and expired secrets), with "Fix the refs" and the expiry form. It does not show tags yet: use `secrets tag`.
 
 ## The vault
