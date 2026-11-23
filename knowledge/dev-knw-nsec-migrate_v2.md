@@ -172,7 +172,7 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
 
    Without this step, `doctor` warns for each store project: `the store project <p> has no local project on this machine`.
 
-10. **Remove the old prefix from the scripts and the documents.** Search each repository for the `secret` prefix and for `secrets run`, for example in the `scripts` of `package.json`, a `Makefile`, a README, or a note. Use the normal command (`"dev": "secret next dev"` → `"dev": "next dev"`). Run `secrets pull` by hand before the dev command: do not put it in `package.json` (`predev`) or in CI. An old command now gives `error: unknown command 'run'`.
+10. **Remove the old prefix from the scripts and the documents.** Search each repository for the `secret` prefix and for `secrets run`, for example in the `scripts` of `package.json`, a `Makefile`, a README, or a note. Use the normal command (`"dev": "secret next dev"` → `"dev": "next dev"`). Run `secrets pull` by hand before the dev command: do not put it in `package.json` (`predev`) or in CI. An old `secrets run` command now gives `Unknown command: run` (exit 1), and the old `secret` command is not found.
 
 11. **Remove the old managed lines of the `.env*` files.** Before v2, some people copied values into `.env.local` or `.env`. `secrets pull` stops on such a line (`PULL_MANAGED_OUTSIDE`, with `line <n>: <VAR>`). Find them without a write:
 
