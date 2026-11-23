@@ -111,7 +111,7 @@ Each secret declares the environments that need a value.
 
 - **The default set** is `dev`, `preview`, `prod`. A platform credential (the names of § Store projects and `shared`) has the default set `deploy`.
 - `metadata.toml` holds only a set that is not the default of its name, under `[envs]` (for example `"nuu-track/SENTRY_AUTH_TOKEN" = ["dev", "prod"]`).
-- **Missing values.** `doctor`, `pull --check`, `export`, `refs`, `plan`, and the page report a missing value only in a declared environment. A variable whose secret does not declare the environment is not delivered: `pull` and `export` add the count to their summary line (`· 1 not declared in dev`), and `plan` removes the variable from the target (`not declared in env dev`).
+- **Missing values.** `doctor`, `pull --check`, `export`, `refs`, `plan`, and the page report a missing value only in a declared environment. A variable whose secret does not declare the environment is not delivered: `pull` and `export` add the count to their summary line (`· 1 not declared in dev`), and `plan` gives the variable a `remove` line (`not declared in env dev`): `push` then removes the variable from the platform.
 - **A value in an undeclared environment is not delivered.** A store file can hold such a value, for example a value that an earlier CLI wrote. `pull`, `export`, `plan`, and `push` do not use it, and they write one warning on stderr with the variable, the name, and the environments, never the value. `doctor` warns for it.
 - **Writes.** `secrets set`, `secrets edit`, and the page refuse a value in an undeclared environment (`ENV_NOT_DECLARED`). `secrets env <name> <envs>` changes the set; it refuses a set that leaves a value outside it (`ENV_HAS_VALUE`). `mv` keeps the declared set of the old name. When a write removes the last value of a name, its set goes too.
 - The store files and the groups do not change: `dev.enc.yaml` and `preview.enc.yaml` are in group `dev`, `prod.enc.yaml` in group `prod`, `deploy.enc.yaml` in group `deploy`.
@@ -131,7 +131,7 @@ A tag is a label for secrets and vault entries, for example `#convex` or `#conve
 
 ## A store of the previous version
 
-A store of the previous version has lowercase path names (for example `clerk/secret-key`), and it can have a plaintext file with the records of its groups by provider. The CLI still reads the old names (`secrets list`, `doctor`, `log`), and `doctor` warns for them. A store of the previous version has no `store.toml` (the store format 1). The v2 CLI refuses its reads and its writes (`STORE_FORMAT`), and only `doctor`, `whoami`, `store list`, `store sync`, `store clone`, `store remove`, and `store migrate` still run on it. A store of the previous version needs the migration: the guide is [[dev-knw-nsec-migrate_v2]]. The migration is an operator write ([[dev-knw-nsec-rules]] § Rule 13).
+A store of the previous version has lowercase path names (for example `clerk/secret-key`), and it can have a plaintext file with the records of its groups by provider. A store of the previous version has no `store.toml` (the store format 1). The v2 CLI refuses its reads and its writes (`STORE_FORMAT`), and only `doctor`, `whoami`, `store list`, `store sync`, `store clone`, `store remove`, and `store migrate` still run on it. A store of the previous version needs the migration: the guide is [[dev-knw-nsec-migrate_v2]]. The migration is an operator write ([[dev-knw-nsec-rules]] § Rule 13).
 
 ## Expiry dates
 

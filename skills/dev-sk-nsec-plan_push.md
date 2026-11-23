@@ -42,14 +42,14 @@ Prepare the delivery of the variables of one environment to a platform. You run 
      | `not valid` | Run `secrets plan <target> --env <env> --offline --json` with the same mapping and store options. Give the operator the matching text from `errors`. For example: a Convex key of the wrong type (`prod:` is only for `prod`; `dev:` is for `dev` and `preview`), a Convex key with no type, or a team id that is not `team_…`. Never move a key from one name to another. |
      | `no access` | The CLI cannot read `deploy.enc.yaml`: the reason can be absent deploy membership or a decrypt error. Report the fixed reason. Do not infer membership from this status alone. It is not a permission to add access, and you do not ask for group `deploy` unless the operator or the task says so. |
 
-   - `set <VAR> ← <name>` or `← literal`: the push sends this variable. `remove <VAR> ← <name> (empty, optional)`: the push removes the variable from the platform. On Railway, a removal has the note `Railway can start a deployment for a removal`.
+   - `set <VAR> ← <name>` or `← literal`: the push sends this variable. `remove <VAR> ← <name> (…)`: the push removes the variable from the platform (it deletes the variable there). A plan has a `remove` line in two cases: an `optional` entry with no value or an empty value (`(empty, optional)`), and an entry whose secret does not declare the environment (`(not declared in env <env> …)`, see below). On Railway, a removal has the note `Railway can start a deployment for a removal`. Report each `remove` line to the operator before the operator runs the push.
    - `error …` lines:
      - ``<VAR> ← <name>: no value in env <env>: moved to secret://<new name> on …; run `secrets refs fix` ``: the change log moved the name. This error comes also for an `optional` entry: a push never removes the variable of the platform because a secret has a new name. Do not request a value. Use [[dev-sk-nsec-diagnose]] (step 7): the operator approves the ref fix first, then run the plan again;
      - a required `ref` with no value or an empty value: request the value with [[dev-sk-nsec-request_value]] (`secrets set <name> --env <env>`). When the line has the hint `removed on …`, ask the operator what to do instead ([[dev-knw-nsec-rules]] § Rule 13);
      - an empty literal: report it; the operator decides the mapping;
      - `targets.railway.environments has no entry for env <env>: …`: report it; the operator decides the Railway environment (Rule 8);
      - `this machine cannot open deploy.enc.yaml: …`: see `no access` above.
-   - A variable whose secret does not declare the environment is not in the target: its line says `not declared in env <env>` (with `its value in env <env> is not used` when the store file has a value). It is not an error, and the push does not send or remove it. When the platform needs the variable, tell the operator: the operator changes the set ([[dev-knw-nsec-rules]] § Rule 13).
+   - A variable whose secret does not declare the environment gets a `remove` line: `remove <VAR> ← <name> (not declared in env <env> (the environments of <name>: …))`, with `; its value in env <env> is not used` when the store file has a value. It is not an error. **The push removes this variable from the platform** when the platform has it. Name each such variable in the report to the operator, with the reason. When the platform needs the variable, tell the operator before the push: the operator changes the set ([[dev-knw-nsec-rules]] § Rule 13), then you run the plan again.
    - The last line is `<n> variables · <m> errors`. With an error, the exit status is 1, and a push would send nothing.
 6. **Know what the plan cannot see.** `plan` calls no platform. A successful plan does not prove that the push passes:
    - Vercel: a variable of the same name that covers the environment and also another environment or a custom environment stops the whole push.
@@ -71,7 +71,8 @@ Prepare the delivery of the variables of one environment to a platform. You run 
    Delivery of <project> to <target>, env <env>.
    Plan (secrets plan <target> --env <env>): <n> variables · 0 errors.
      set: <VAR>, <VAR>, …
-     remove: <VAR>, … (or: none)
+     remove: <VAR> (<the reason: empty, optional; or not declared in env <env>>), … (or: none)
+   Each `remove` variable is deleted on the platform by the push.
    The plan cannot see the platform state (shared Vercel variables, Railway reference variables, identifier collisions).
 
    When you approve, run in the project folder:

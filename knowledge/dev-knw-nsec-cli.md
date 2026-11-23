@@ -141,10 +141,10 @@ remove   OPT_SECRET  ← shared/OPT_SECRET (empty, optional)
 3 variables · 0 errors
 ```
 
-- `set` sends the value of a `ref`, or a literal. `remove` removes an `optional` entry that has no value or an empty value in the environment. On a Railway `remove` line, the plan adds `Railway can start a deployment for a removal`.
+- `set` sends the value of a `ref`, or a literal. `remove` removes the variable from the platform: for an `optional` entry that has no value or an empty value in the environment (`(empty, optional)`), and for an entry whose secret does not declare the environment (`(not declared in env <env> …)`). On a Railway `remove` line, the plan adds `Railway can start a deployment for a removal`.
 - The status of a credential (`key` line) is `ok`, `missing`, `empty`, `not valid`, `no access`, or `not set` (an optional credential with no value).
 - An `error` line: a `ref` whose name the change log moved, also an `optional` ref (``<VAR> ← <name>: no value in env <env>: moved to secret://<new name> on …; run `secrets refs fix` ``), a required `ref` with no value or with an empty value (with the hint `removed on …` when the change log removed it), an empty literal, no access to `deploy.enc.yaml`, or a Railway environment with no entry (`targets.railway.environments has no entry for env <env>: …`). A credential that is `missing`, `empty`, `not valid`, or `no access` is also an error.
-- A variable whose secret does not declare the environment is not in the target: the line has `not declared in env <env>`, and for a value in that environment also `its value in env <env> is not used` (a warning on stderr). It is not an error.
+- A variable whose secret does not declare the environment gets a `remove` line: `remove  <VAR>  ← <name> (not declared in env <env> (the environments of <name>: …))`, and for a value in that environment also `; its value in env <env> is not used` (and a warning on stderr). It is not an error. The push removes the variable from the platform. Report each `remove` line to the operator before a push.
 - The last line counts the variables and the errors.
 - Text output shows the credential status. It omits the detailed credential error for `missing`, `empty`, and `not valid`. Use `--json` for that error text.
 

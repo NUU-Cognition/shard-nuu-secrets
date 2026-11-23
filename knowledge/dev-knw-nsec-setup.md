@@ -189,7 +189,7 @@ secrets list --project shared                                  # the shared secr
 secrets mv nuu-track/OPENAI_API_KEY shared/OPENAI_API_KEY      # one copy for many projects: the move to shared
 secrets bind OPENAI_API_KEY shared/OPENAI_API_KEY --to local   # then each project links to it
 secrets env nuu-track/SENTRY_AUTH_TOKEN                        # show the declared environments
-secrets env nuu-track/SENTRY_AUTH_TOKEN dev,prod               # change the set (no value may stay outside it)
+secrets env nuu-track/SENTRY_AUTH_TOKEN dev,prod               # change the set: read it first, remove only what is not needed (no value may stay outside it)
 secrets set nuu-track/CLERK_SECRET_KEY --env preview           # preview has its own value: it does not read dev
 secrets tag list                                               # the tag tree with the counts and the records
 secrets tag add nuu-track/CONVEX_DEPLOY_KEY_PROD convex/deploy-keys
