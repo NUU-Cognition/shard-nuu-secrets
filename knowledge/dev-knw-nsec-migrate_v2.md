@@ -9,7 +9,7 @@ This guide is for the operator. It changes a store of the previous version (stor
 > [!warning] Operator hold
 > On 2026-11-23 the operator said: do not migrate the secrets of the local repositories yet. The guide and the skill are for later. Start the migration only when the operator says so.
 
-The words are the words of [[dev-knw-nsec-rules]] § Words. The model of v2 is in [[dev-knw-nsec-model]]. Each command of this guide is in the CLI npm `@nuucognition/secrets-cli@0.4.0-beta.0`, with the same flags ([[dev-knw-nsec-cli]]).
+The words are the words of [[dev-knw-nsec-rules]] § Words. The model of v2 is in [[dev-knw-nsec-model]]. Each command of this guide is in the CLI npm `@nuucognition/secrets-cli@0.4.0-beta.0`, with the same flags ([[dev-knw-nsec-cli]]). Use that release. A build from source must contain the commit `6ee9194` of `NUU-Cognition/secrets` (and so `5afea88` and `168725d`): a build without these three fixes (for example `1aadb82`) can change the refs of another store, follow a symbolic link in the path of the plan file, and refuse a plan with a name that needs no rename.
 
 ## Who must migrate
 
@@ -62,7 +62,7 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
 
    Keep the folder `store-before-v2` until the end of the migration. The rollback uses it ([Rollback](#rollback)).
 
-   **Also back up the local files of each machine** (on the migration machine now, and on each other machine before its first command of the v2 CLI). The migration changes the `secrets.local.toml` files (step 8), and the v2 CLI writes a new form of `projects.toml` (the project index, with the identity of each project). The rollback restores these copies. The files hold names and paths, never a value. Keep the copy private and outside each repository (run the commands in `bash`):
+   **Also back up the local files of each machine** (on the migration machine now, and on each other machine before its first command of the v2 CLI). Do this before each command of the v2 CLI, also before a v2 `secrets doctor` or a v2 `--help` in a project folder: **the v2 CLI can change `projects.toml` when it loads a project** (it writes the new fields of the index), and then the old CLI refuses that file. A backup after a v2 command does not have the old index. The migration changes the `secrets.local.toml` files (step 8), and the v2 CLI writes a new form of `projects.toml` (the project index, with the identity of each project). The rollback restores these copies. The files hold names and paths, never a value. Keep the copy private and outside each repository (run the commands in `bash`):
 
    ```sh
    B=~/secrets-before-v2
@@ -81,7 +81,7 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
    secrets --version
    ```
 
-   Give the exact version: an npm tag can give an older version. After this step, no machine may write the store with the old CLI.
+   Give the exact version: an npm tag can give an older version. Do not use a build without the commit `6ee9194` (see the start of this guide). Run `secrets --version` outside each project folder. After this step, no machine may write the store with the old CLI.
 
 3. **Check the store.** Run `secrets store list` (the store is in the list), then `secrets doctor --online` in each project folder. Until step 8, the v2 CLI gives these `fail` lines for a valid project of the previous version. They are expected:
 
@@ -89,8 +89,9 @@ In the commands below, `<store>` is the store name of `secrets store list`, `<ur
    - `<path>/secrets.toml is not valid:` (also `<path>/secrets.local.toml`), with only these lines:
      - `env.<VAR>.ref must be secret://<project>/<VARIABLE>, for example secret://shared/<VARIABLE>` (an old lowercase name);
      - `env.<VAR>.ref: secret://<name> is a secret of the project "<p>": a ref can point only to the project shared or to the project itself (move the value to shared/<x>)` (an old name whose first segment is not the project).
+   - `preview: <VAR> → secret://<name> is not in the store` (section Mapping), for a ref that is already valid in v2 (for example `secret://web/token` in the project `web`) to a name with a dev value and no preview value. Before v2, `preview` read the dev value. In v2, `preview` reads only its own values, so this line is expected before step 7. The apply lists the name in the preview list, and step 7 resolves it (a preview value, or the set with no `preview`).
 
-   Each other `fail` line is a blocker: stop, and fix it first ([[dev-sk-nsec-diagnose]]). A project that was `0 fail` with the old CLI (see [Before you start](#before-you-start)) has no other `fail` line. Step 8 changes the refs, and step 13 needs `0 fail` in each project.
+   Each other `fail` line is a blocker: stop, and fix it first ([[dev-sk-nsec-diagnose]]). For example, a missing value of `dev` or `prod`, or a missing preview value of a name with no dev value, is not an expected line. The project must be `0 fail` with the old CLI (see [Before you start](#before-you-start)). Step 7 gives the preview values, step 8 changes the refs, and step 13 needs `0 fail` in each project.
 
 4. **Make the plan.** It changes no store and no project file. It reads the names of the store files (no decrypt) and the refs of the projects:
 
@@ -269,11 +270,18 @@ Task 035 followed this guide two times on a test store of format 1 made with the
 - `secrets plan vercel --env prod --offline` passed. No test value was in the CLI output, the plan, or a Git object; only the `.env.local` files (mode 600) had values.
 - The rollback: the revert of the later store writes and of the migration commit (no difference to the tag `before-v2`), the revert of the project commit, `secrets store sync` with the old CLI, then the restore of `projects.toml` and `secrets.local.toml` from the backup. The old CLI then gave `0 fail` in each project, and the v2 CLI refused the store of format 1 again.
 
+The third run (the second fix round, 2026-11-23) added the project `stable` with the ref `secret://stable/token`, which is already valid in v2, and with dev and prod values and no preview value. The CLI source was at `11f984e` (the migration code of `6ee9194` and `010304c`). The result:
+
+- `secrets --version` outside a project folder did not change `projects.toml`. The first v2 `doctor` in a project folder changed it, and the old `secrets project list` then exited 1. Thus step 1 backs up the local files before each v2 command.
+- Step 3: `stable` gave only the store format line and `fail  preview: token → secret://stable/token is not in the store` (the expected preview line). The plan had `No rename for 2 name(s): stable/token, web/token`. Step 7 gave `secrets env stable/token dev,prod`.
+- Step 13: each of the four projects gave `exit 0` and `0 fail`.
+- After the rollback and the restore, the old CLI gave `0 fail` in each project, and the old `secrets project list` exited 0.
+
 ## Known limits
 
 1. The plan does not read comments, and `refs fix` does not change them.
 2. A CLI of `0.3.0-beta.0` or earlier does not know `store.toml`: step 2 is the only protection.
 3. The apply needs one machine that opens each store file (`dev`, `prod`, `deploy`).
 4. The README of the CLI (`README.md` of `NUU-Cognition/secrets`, commit `010304c` of `even-macbook`) has the sections of the store format and of `secrets store migrate`. This guide gives the order of the steps for a team, and `secrets store migrate --help` gives the options.
-5. The review of Task 029 (2026-11-23) found 3 defects in the build `1aadb82`. All three are fixed on `even-macbook`: `refs fix --all --plan <plan>` changes only the refs of the store of the plan (`5afea88`); the plan file is read and written with no symbolic link in any part of its path (`168725d`); a name that needs no rename is not a move, and each plan of `--plan` parses (`6ee9194`). Use the release `0.4.0-beta.0`, which has these fixes.
+5. The review of Task 029 (2026-11-23) found 3 defects in the build `1aadb82`. All three are fixed on `even-macbook`: `refs fix --all --plan <plan>` changes only the refs of the store of the plan (`5afea88`); the plan file is read and written with no symbolic link in any part of its path (`168725d`); a name that needs no rename is not a move, and each plan of `--plan` parses (`6ee9194`). Use the release `0.4.0-beta.0`, which has these fixes, or a build that contains `6ee9194`. Do not use `1aadb82`.
 6. The plan does not back up the local files of a machine (`secrets.local.toml`, `projects.toml`). Step 1 does it.

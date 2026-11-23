@@ -33,18 +33,21 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
    - an edit of `.env.local` or another `.env*` file (Rule 15), and an edit of a plan file;
    - `secrets pull` and `secrets pull --all` during the migration (they write `.env.local`; `secrets pull --check` is a read), and `secrets pull --force`.
 
-3. **Check the versions.**
-   - `secrets --version`: it must be `0.4.0-beta.0` or later. `secrets --help` must list `pull` and `store`, and `secrets store migrate --help` must exist. Else ask the operator to install `npm install -g @nuucognition/secrets-cli@0.4.0-beta.0` (step 2 of the guide).
+3. **Check the backup of the local files first.** The v2 CLI can change `projects.toml` when it loads a project (a v2 `secrets doctor`, or a v2 `--help` in a project folder), and then the old CLI refuses that file. Before each v2 command in a project folder, ask the operator to confirm that step 1 of [[dev-knw-nsec-migrate_v2]] is done on this machine: the backup of `projects.toml` and of each `secrets.local.toml`. The backup is an operator step. Without the confirmation, give the operator the commands of step 1, and stop. Run the version checks below outside each project folder.
+
+4. **Check the versions.**
+   - `secrets --version`: it must be `0.4.0-beta.0` or later. A build from source must contain the commit `6ee9194` (the three migration fixes); `1aadb82` is not sufficient. `secrets --help` must list `pull` and `store`, and `secrets store migrate --help` must exist. Else ask the operator to install `npm install -g @nuucognition/secrets-cli@0.4.0-beta.0` (step 2 of the guide).
    - `secrets store list`: the store is in the list.
    - `secrets whoami`: the groups of this machine. The apply needs a machine with `dev`, `prod`, and `deploy`. Report the groups.
 
-4. **Check the store.** Run plain `secrets doctor` in each project folder of the store (Rule 6). Read the `fail` lines:
+5. **Check the store.** Run plain `secrets doctor` in each project folder of the store (Rule 6). Read the `fail` lines:
    - `fail  store format 1 (no store.toml): … needs format 2 …`: the store needs the migration. Continue.
    - `fail  <path>/secrets.toml is not valid:` (or `secrets.local.toml`) with only the lines `env.<VAR>.ref must be secret://<project>/<VARIABLE>, …` and `env.<VAR>.ref: secret://<name> is a secret of the project "<p>": a ref can point only to the project shared or to the project itself …`: these are the old refs of a valid project of the previous version. They are expected until the refs fix (step 8 of the guide). Continue, and list them in the report.
+   - `fail  preview: <VAR> → secret://<name> is not in the store` for a ref that is already valid in v2, to a name with a dev value and no preview value: before v2, preview read the dev value. This line is expected before step 7 of the guide. Keep the name for the preview list of step 7. A missing value of another environment is not expected.
    - `ok  store format 2 (store.toml): …`: the store needs no migration (`secrets store migrate --plan` also says `… has the store format 2: it needs no migration.`). Report it and stop. When the project files still have old names, give the operator step 8 of the guide (`secrets refs fix --all … --dry-run` first).
    - Each other `fail` line (another problem of a project file, a key, a recipient, or the store): report it with [[dev-sk-nsec-diagnose]] first. The migration waits. When the operator still has the old CLI, ask the operator to run `secrets doctor` with it in each project: each project must show `0 fail` before the migration ([[dev-knw-nsec-migrate_v2]] § Before you start).
 
-5. **Make the plan (read only).** The plan changes no store file and no project file. It writes only the plan file (names only, never a value). It refreshes the clone: follow the refresh rule of Rule 6, or add `--offline` after a plain `doctor`:
+6. **Make the plan (read only).** The plan changes no store file and no project file. It writes only the plan file (names only, never a value). It refreshes the clone: follow the refresh rule of Rule 6, or add `--offline` after a plain `doctor`:
 
    ```sh
    secrets store migrate --plan --store <store> --projects <repo> --out <plan>
@@ -52,7 +55,7 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
 
    Give `--projects` one time for each repository. The path of `<plan>` must have no symbolic link in any part (on macOS, not `/tmp`): else `BAD_PLAN`, and nothing is written. Use a path in the home folder. Do not add `--force` to replace a plan file that the operator edited: use another `--out`, or ask the operator.
 
-6. **Read the plan.** Read the output and the plan file (it holds names only). Report to the operator:
+7. **Read the plan.** Read the output and the plan file (it holds names only). Report to the operator:
    - the count line (`<n> name(s) of before v2, <n> project(s) in <n> file(s)`);
    - each conflict, by kind, with what the guide says to do (step 5 of the guide);
    - each line with `no preview value` in its comment: after the apply, the operator gives it a preview value or removes `preview` from its set (step 7 of the guide). Propose which one, when the task says if the app has a preview;
@@ -62,13 +65,13 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
 
    Do not edit the plan file. Propose each change (`to`, `envs`, `tags`) with the line, and the operator edits the file.
 
-7. **Give the operator the write commands in order.** Use the exact commands of [[dev-knw-nsec-migrate_v2]], with the real `<store>`, `<url>`, `<repo>`, and `<plan>`:
+8. **Give the operator the write commands in order.** Use the exact commands of [[dev-knw-nsec-migrate_v2]], with the real `<store>`, `<url>`, `<repo>`, and `<plan>`:
    1. the backup clone and the tag `before-v2`, and the backup of the local files of each machine (`projects.toml` and each `secrets.local.toml`) (step 1);
    2. the CLI update on each machine and in CI (step 2), and the stop of the writes of the other machines;
-   3. the plan edits of step 6 above, if any;
+   3. the plan edits of step 7 above, if any;
    4. `secrets store migrate --apply <plan>` (step 6 of the guide);
    5. for each name of the preview list: `secrets set <name> --env preview`, or `secrets env <name> <the declared set with no preview>` (step 7). Read the set with `secrets env <name>` (a read: you can run it) and give the exact set: `dev, preview` gives `secrets env <name> dev`; `dev, preview, prod` gives `secrets env <name> dev,prod`. Never add an environment that the set does not have;
-   6. `secrets refs fix --all --projects <repo> --plan <plan> --yes`, after the dry run of step 8 below;
+   6. `secrets refs fix --all --projects <repo> --plan <plan> --yes`, after the dry run of step 9 below;
    7. `secrets project add <repo>` (step 9);
    8. the old scripts and the old `.env*` lines (steps 10 and 11);
    9. `secrets pull --all` (it writes the `.env.local` files: an operator step here) and the commit of the project files (steps 12 and 14);
@@ -76,7 +79,7 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
 
    Give them as one numbered list. Say that the apply is one commit and one push to the team store, and that the rollback is in the guide.
 
-8. **After the apply of the operator: the dry run of the refs.** When the operator says that the apply is done, run:
+9. **After the apply of the operator: the dry run of the refs.** When the operator says that the apply is done, run:
 
    ```sh
    secrets refs fix --all --projects <repo> --plan <plan> --dry-run
@@ -84,7 +87,7 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
 
    Give the operator the list (`<VAR>  secret://<old> → …`) and the command with `--yes`. Do not run it. A line that the CLI does not change (a warning) goes to the operator.
 
-9. **After the refs fix of the operator: the checks.** Run only these:
+10. **After the refs fix of the operator: the checks.** Run only these:
    - `secrets project add <repo> --dry-run`: report the projects to add (the operator runs it without `--dry-run`, step 9 of the guide);
    - `secrets pull --check --all`: report each `line <n>: <VAR>` outside the block. The operator removes these lines. Do not open the file;
    - after the operator ran `secrets pull --all`: `secrets pull --check --all` again. Each project must be current;
@@ -92,12 +95,12 @@ Help the operator move a store of the previous version (store format 1, CLI `0.3
 
    Do not run `secrets pull --all` in this skill: it writes the `.env.local` files, and each write of the migration is an operator step. A later app run is not a part of this skill.
 
-10. **Find the old prefix.** Search the repositories for the old command, for example `grep -rn --include=package.json '"secret ' <repo>` and a search for `secrets run` in the documents. Report each file and line. You can change a script or a document when the task allows a change of the repository (`"secret next dev"` → `"next dev"`), with the commit rules of the repository. Never add `secrets pull` to the scripts.
+11. **Find the old prefix.** Search the repositories for the old command, for example `grep -rn --include=package.json '"secret ' <repo>` and a search for `secrets run` in the documents. Report each file and line. You can change a script or a document when the task allows a change of the repository (`"secret next dev"` → `"next dev"`), with the commit rules of the repository. Never add `secrets pull` to the scripts.
 
-11. **Report.** Give the operator: the versions, the groups, the format line, the plan path and its counts, the conflicts, the preview list, the ordered commands, the dry-run list, and the `doctor` results. Never a value.
+12. **Report.** Give the operator: the versions, the groups, the format line, the plan path and its counts, the conflicts, the preview list, the ordered commands, the dry-run list, and the `doctor` results. Never a value.
 
 > [!headless]
-> In a headless session, each write of step 7 is a blocker for the operator. Put the ordered commands, the conflicts, and the preview list in the result. Set `flint orbh session set blockers "store <store>: the migration to format 2 needs the operator"`. Do not wait.
+> In a headless session, each write of step 8 is a blocker for the operator. Put the ordered commands, the conflicts, and the preview list in the result. Set `flint orbh session set blockers "store <store>: the migration to format 2 needs the operator"`. Do not wait.
 
 # Output
 
